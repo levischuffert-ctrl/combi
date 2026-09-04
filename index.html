@@ -43,10 +43,11 @@
   }
   .map-fab:hover{ box-shadow:0 8px 20px rgba(0,0,0,.45); }
   .map-fab:active{ transform:scale(.88); }
-  #compassBtn{ bottom:204px; }
+  #watchBtn{ bottom:254px; }
+  #routeBtn{ bottom:204px; }
   #filterBtn{ bottom:154px; }
   #locateBtn{ bottom:104px; }
-  #compassIcon{ transition:transform .15s linear; }
+  #locateIcon{ transition:transform .2s var(--ease-standard); }
   .map-fab.active{ background:var(--accent); border-color:var(--accent); }
   .map-fab.active svg{ stroke:var(--accent-ink); }
   .mapscreen.sheet-expanded .map-fab{ opacity:0; transform:scale(.7); pointer-events:none; }
@@ -169,6 +170,11 @@
   .filter-check span span{ color:var(--accent); font-weight:700; }
   .filter-note{ font-size:10.5px; color:var(--ink-soft); line-height:1.5; margin-top:6px; }
 
+  /* ---------- Routenplanung ---------- */
+  #routeSuggestions .row{ padding:10px 4px; }
+  .route-result{ margin-top:16px; }
+  .route-price-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
+
   /* ---------- Profil / Konto / Einstellungen ---------- */
   .profile-head{ display:flex; align-items:center; gap:10px; }
   .section-label{ font-family:var(--font-display); font-size:11.5px; font-weight:700; letter-spacing:.02em; color:var(--ink-soft); margin:18px 4px 6px; text-transform:uppercase; }
@@ -250,14 +256,17 @@
     <div class="mapscreen" id="mapScreen">
       <div class="mapwrap">
         <div id="map"></div>
-        <div class="map-fab" id="compassBtn" title="Nach Norden ausrichten" style="display:none;">
-          <svg id="compassIcon" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 2 8 13l4-2 4 2z" fill="var(--ink)" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>
+        <div class="map-fab" id="watchBtn" title="Scooter Watch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6z"/><path d="M9 18a3 3 0 0 0 6 0"/></svg>
+        </div>
+        <div class="map-fab" id="routeBtn" title="Route planen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>
         </div>
         <div class="map-fab" id="filterBtn" title="Filter">
           <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
         </div>
-        <div class="map-fab" id="locateBtn" title="Meinen Standort verwenden">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        <div class="map-fab" id="locateBtn" title="Standort / Nordausrichtung">
+          <svg id="locateIcon" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
         </div>
       </div>
 
@@ -309,6 +318,30 @@
       <div class="navitem" data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a2 2 0 002 2h0a2 2 0 002-2V3M8 12v9M17 3c-1.7 0-3 2.2-3 5s1.3 5 3 5v9"/></svg><span>Essen</span></div>
       <div class="navitem" data-tab="providers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Anbieter</span></div>
       <div class="navitem" data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span>Profil</span></div>
+    </div>
+
+    <div class="overlay" id="watchOverlay">
+      <div class="detail" id="watchBody"></div>
+    </div>
+
+    <div class="overlay" id="routeOverlay">
+      <div class="detail" id="routeBody">
+        <div class="detail-top">
+          <div style="flex:1;">
+            <div class="detail-title">Route</div>
+            <div class="detail-sub">Ziel eingeben – Route wird ab deinem Standort berechnet</div>
+          </div>
+          <div class="detail-close" id="routeClose">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </div>
+        </div>
+        <div class="food-search" style="margin-top:14px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input type="text" id="routeSearchInput" placeholder="Adresse, Ort oder Sehenswürdigkeit">
+        </div>
+        <div id="routeSuggestions"></div>
+        <div id="routeResult"></div>
+      </div>
     </div>
 
     <div class="overlay" id="detailOverlay">
@@ -480,18 +513,18 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 L.control.zoom({ position:'topright' }).addTo(map);
 
-const compassBtn = document.getElementById('compassBtn');
-const compassIcon = document.getElementById('compassIcon');
+const locateIcon = document.getElementById('locateIcon');
 if(ROTATE_SUPPORTED){
-  compassBtn.style.display = 'flex';
-  compassBtn.addEventListener('click', ()=> map.setBearing(0));
-  // Icon zeigt immer visuell nach Norden, auch waehrend die Karte gedreht wird.
+  // Icon zeigt immer visuell nach Norden und signalisiert damit, ob die
+  // Karte gerade gedreht ist.
   map.on('rotate', ()=>{
-    compassIcon.style.transform = `rotate(${-map.getBearing()}deg)`;
+    locateIcon.style.transform = `rotate(${-map.getBearing()}deg)`;
+    document.getElementById('locateBtn').classList.toggle('active', Math.abs(map.getBearing()) > 1);
   });
 }
-// Ist das Plugin nicht geladen (z.B. kein Netzwerkzugriff), bleibt der Button
-// unsichtbar und die Karte funktioniert exakt wie zuvor, nur ohne Drehung.
+// Ist das Plugin nicht geladen (z.B. kein Netzwerkzugriff), bleibt die Karte
+// unrotierbar und der Button verhaelt sich einfach wie ein reiner
+// Standort-Button - kein zusaetzlicher Code noetig.
 
 let userMarker = null;
 let scooterLayer = L.layerGroup().addTo(map);
@@ -532,16 +565,35 @@ function pickVehicleDeepLink(v){
 
 let vehiclesById = new Map();
 
+/* GBFS definiert keine eigene "kurze Scooter-Nummer" fuer Endnutzer - es
+   gibt nur die technische Fahrzeug-ID. Ist diese bereits kurz, wird sie
+   direkt gezeigt; sonst wird sie NICHT durch eine erfundene Nummer ersetzt,
+   sondern lediglich lesbarer gekuerzt dargestellt (letzte 6 Zeichen der
+   echten ID) - klar als "Ref." gekennzeichnet, keine neue ID. */
+function shortScooterRef(rawId){
+  if(!rawId) return '–';
+  if(/^[A-Za-z0-9_-]{1,8}$/.test(rawId)) return rawId.toUpperCase();
+  const clean = rawId.replace(/[^A-Za-z0-9]/g, '');
+  return clean.slice(-6).toUpperCase();
+}
+
 function openDetail(v){
   const p = PROVIDER_META[v.provider];
   const dl = distLabel(v);
   const link = pickVehicleDeepLink(v);
+  const rangeKm = v.rangeMeters != null ? (v.rangeMeters/1000).toFixed(1) : null;
 
   const stats = `
     <div class="detail-stats">
       <div class="detail-stat"><b>${v.battery !== null ? v.battery + '%' : '–'}</b><span>Akku</span></div>
       <div class="detail-stat"><b>${dl || '–'}</b><span>Entfernung</span></div>
       <div class="detail-stat"><b>${p.name}</b><span>Anbieter</span></div>
+    </div>
+    ${rangeKm ? `<div class="detail-stats"><div class="detail-stat" style="flex:1;"><b>ca. ${rangeKm} km</b><span>Reichweite</span></div></div>` : ''}
+    <div class="section-label" style="margin-top:2px;">Preis</div>
+    <div class="detail-stats" id="priceStats">
+      <div class="detail-stat"><b id="priceUnlock">…</b><span>Entsperren</span></div>
+      <div class="detail-stat"><b id="pricePerMin">…</b><span>Pro Minute</span></div>
     </div>
   `;
 
@@ -563,8 +615,8 @@ function openDetail(v){
     <div class="detail-top">
       ${logoHtml(v.provider, p.color)}
       <div>
-        <div class="detail-title">${p.name} Scooter</div>
-        <div class="detail-sub">${v.id}</div>
+        <div class="detail-title">Scooter #${shortScooterRef(v.rawId)}</div>
+        <div class="detail-sub">Anbieter: ${p.name}</div>
       </div>
       <div class="detail-close" id="detailClose">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -576,6 +628,17 @@ function openDetail(v){
   `;
   detailBody.querySelector('#detailClose').addEventListener('click', closeDetail);
   detailOverlay.classList.add('show');
+
+  // Preise stammen aus dem echten system_pricing_plans-Feed - werden
+  // asynchron nachgeladen, ohne den Rest der Ansicht zu blockieren.
+  getSystemPricing(v.systemId).then(pricing=>{
+    if(!detailOverlay.classList.contains('show')) return; // Ansicht inzwischen geschlossen
+    const unlockEl = detailBody.querySelector('#priceUnlock');
+    const perMinEl = detailBody.querySelector('#pricePerMin');
+    if(!unlockEl || !perMinEl) return; // zwischenzeitlich ein anderer Scooter geoeffnet
+    unlockEl.textContent = pricing?.unlock != null ? `${pricing.unlock.toFixed(2)} ${pricing.currency||'€'}` : 'nicht verfügbar';
+    perMinEl.textContent = pricing?.perMin != null ? `${pricing.perMin.toFixed(2)} ${pricing.currency||'€'}/min` : 'nicht verfügbar';
+  });
 }
 
 function closeDetail(){
@@ -592,6 +655,375 @@ function selectScooter(id){
 const detailOverlay = document.getElementById('detailOverlay');
 const detailBody = document.getElementById('detailBody');
 detailOverlay.addEventListener('click', (e)=>{ if(e.target === detailOverlay) closeDetail(); });
+
+/* =====================================================================
+   SCOOTER WATCH
+   Lokal gespeicherte Suchalarme (localStorage, kein Backend). Bei jedem
+   Datenabgleich (loadNearby) wird geprueft, ob NEU ein passendes
+   Fahrzeug in Reichweite ist - dabei wird unabhaengig von den
+   Kartenfiltern auf ALLEN geladenen Fahrzeugen geprueft, nicht nur den
+   aktuell angezeigten. Benachrichtigung ueber die Web Notification API,
+   falls erlaubt; sonst ein In-App-Toast als ehrlicher Fallback (echte
+   Push-Benachrichtigungen ausserhalb der geoeffneten App wuerden ein
+   eigenes Backend + Service Worker erfordern, das es hier nicht gibt).
+   ===================================================================== */
+
+const WATCH_KEY = 'combine_watches_v1';
+function loadWatches(){ try{ return JSON.parse(localStorage.getItem(WATCH_KEY) || '[]'); }catch(e){ return []; } }
+function saveWatches(list){ try{ localStorage.setItem(WATCH_KEY, JSON.stringify(list)); }catch(e){} }
+
+const watchOverlay = document.getElementById('watchOverlay');
+const watchBody = document.getElementById('watchBody');
+let watchView = 'list'; // 'list' | 'create'
+let watchDraftProviders = new Set(Object.keys(PROVIDER_META));
+let watchDraftRadius = 500;
+
+function openWatch(){ watchView = 'list'; renderWatchScreen(); watchOverlay.classList.add('show'); }
+function closeWatch(){ watchOverlay.classList.remove('show'); }
+document.getElementById('watchBtn').addEventListener('click', openWatch);
+watchOverlay.addEventListener('click', (e)=>{ if(e.target === watchOverlay) closeWatch(); });
+
+function renderWatchScreen(){
+  if(watchView === 'create') renderWatchCreate();
+  else renderWatchList();
+}
+
+function renderWatchList(){
+  const watches = loadWatches();
+  watchBody.innerHTML = `
+    <div class="detail-top">
+      <div style="flex:1;">
+        <div class="detail-title">Scooter Watch</div>
+        <div class="detail-sub">Benachrichtigung, sobald ein passender Scooter in der Nähe auftaucht</div>
+      </div>
+      <div class="detail-close" id="watchCloseX">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div id="watchListItems" style="margin-top:12px;"></div>
+    <div class="detail-btn" id="watchAddBtn" style="margin-top:14px;">+ Neue Watch</div>
+  `;
+  watchBody.querySelector('#watchCloseX').addEventListener('click', closeWatch);
+  watchBody.querySelector('#watchAddBtn').addEventListener('click', ()=>{
+    watchDraftProviders = new Set(Object.keys(PROVIDER_META));
+    watchDraftRadius = 500;
+    watchView = 'create';
+    renderWatchScreen();
+  });
+
+  const list = watchBody.querySelector('#watchListItems');
+  if(!watches.length){
+    list.innerHTML = '<div class="empty">Noch keine Watch angelegt.</div>';
+    return;
+  }
+  watches.forEach(w=>{
+    const providerNames = w.providers.map(k => PROVIDER_META[k]?.name).filter(Boolean).join(', ') || 'keine Anbieter';
+    const row = document.createElement('div');
+    row.className = 'compare-row';
+    row.innerHTML = `
+      <div class="compare-top">
+        <div class="compare-name">${metersLabel(w.radiusM)} · ${escapeHtml(providerNames)}</div>
+      </div>
+      <div style="font-size:11.5px; color:${w.active ? 'var(--ok)' : 'var(--ink-soft)'}; font-weight:600; margin-bottom:10px;">${w.active ? '● Aktiv' : '○ Pausiert'}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div class="goto" data-act="toggle" style="cursor:pointer;">${w.active ? 'Pausieren' : 'Aktivieren'}</div>
+        <div class="goto" data-act="delete" style="cursor:pointer;">Löschen</div>
+      </div>
+    `;
+    row.querySelector('[data-act="toggle"]').addEventListener('click', ()=>{
+      const all = loadWatches();
+      const found = all.find(x=>x.id===w.id);
+      if(found) found.active = !found.active;
+      saveWatches(all);
+      renderWatchList();
+    });
+    row.querySelector('[data-act="delete"]').addEventListener('click', ()=>{
+      saveWatches(loadWatches().filter(x=>x.id!==w.id));
+      renderWatchList();
+    });
+    list.appendChild(row);
+  });
+}
+
+function renderWatchCreate(){
+  watchBody.innerHTML = `
+    <div class="detail-top">
+      <div class="detail-close" id="watchBackBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg></div>
+      <div style="flex:1;">
+        <div class="detail-title">Neue Watch</div>
+      </div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Anbieter</div>
+      <div id="watchProviderList"></div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Radius <span id="watchRadiusValue"></span></div>
+      <input type="range" id="watchRadiusSlider" class="filter-slider" min="100" max="2000" step="50">
+    </div>
+    <div class="detail-btn" id="watchSaveBtn" style="margin-top:6px;">Watch aktivieren</div>
+  `;
+  watchBody.querySelector('#watchBackBtn').addEventListener('click', ()=>{ watchView='list'; renderWatchScreen(); });
+
+  const provList = watchBody.querySelector('#watchProviderList');
+  Object.entries(PROVIDER_META).forEach(([key,p])=>{
+    const isOn = watchDraftProviders.has(key);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `${logoHtml(key,p.color)}<div class="rowinfo"><div class="name">${p.name}</div></div><div class="toggle ${isOn?'on':''}" data-key="${key}"><div class="knob"></div></div>`;
+    row.querySelector('.toggle').addEventListener('click', ()=>{
+      if(watchDraftProviders.has(key)) watchDraftProviders.delete(key); else watchDraftProviders.add(key);
+      renderWatchCreate();
+    });
+    provList.appendChild(row);
+  });
+
+  const radiusSlider2 = watchBody.querySelector('#watchRadiusSlider');
+  const radiusValue2 = watchBody.querySelector('#watchRadiusValue');
+  radiusSlider2.value = watchDraftRadius;
+  radiusValue2.textContent = metersLabel(watchDraftRadius);
+  radiusSlider2.addEventListener('input', ()=>{
+    watchDraftRadius = Number(radiusSlider2.value);
+    radiusValue2.textContent = metersLabel(watchDraftRadius);
+  });
+
+  watchBody.querySelector('#watchSaveBtn').addEventListener('click', ()=>{
+    if(watchDraftProviders.size === 0) return;
+    const all = loadWatches();
+    all.push({
+      id: 'watch_' + Date.now(),
+      providers: [...watchDraftProviders],
+      radiusM: watchDraftRadius,
+      active: true,
+      seenIds: []
+    });
+    saveWatches(all);
+    if('Notification' in window && Notification.permission === 'default'){
+      Notification.requestPermission();
+    }
+    watchView = 'list';
+    renderWatchScreen();
+  });
+}
+
+/* ---------- Kleiner Toast als Fallback, wenn Web-Notifications nicht
+   erlaubt/verfuegbar sind (App muss dafuer geoeffnet sein). ---------- */
+function showToast(title, body){
+  const el = document.createElement('div');
+  el.style.cssText = 'position:absolute; left:14px; right:14px; top:14px; z-index:300; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; box-shadow:0 10px 24px rgba(0,0,0,.4); transform:translateY(-12px); opacity:0; transition:transform .25s var(--ease-out), opacity .25s;';
+  el.innerHTML = `<div style="font-family:var(--font-display); font-weight:700; font-size:13px;">${escapeHtml(title)}</div><div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(body)}</div>`;
+  document.querySelector('.phone').appendChild(el);
+  requestAnimationFrame(()=>{ el.style.transform='translateY(0)'; el.style.opacity='1'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-12px)'; setTimeout(()=> el.remove(), 300); }, 4500);
+}
+
+function notifyScooterFound(watch, vehicle){
+  const title = '🛴 Scooter verfügbar';
+  const body = `Ein Scooter von ${PROVIDER_META[vehicle.provider].name} ist jetzt ${metersLabel(vehicle.dist)} von dir entfernt.`;
+  if('Notification' in window && Notification.permission === 'granted'){
+    try{ new Notification(title, { body }); return; }catch(e){}
+  }
+  showToast(title, body);
+}
+
+/* Wird nach jedem Laden neuer Fahrzeugdaten aufgerufen (siehe loadNearby).
+   Prueft unabhaengig von den Kartenfiltern auf ALLEN geladenen Fahrzeugen. */
+function checkScooterWatches(){
+  if(!userPos) return;
+  const watches = loadWatches();
+  if(!watches.length) return;
+  let changed = false;
+  watches.forEach(w=>{
+    if(!w.active) return;
+    const matchIds = lastNearbyVehicles
+      .filter(v => w.providers.includes(v.provider) && v.dist != null && v.dist <= w.radiusM)
+      .map(v => v.id);
+    const prevSeen = new Set(w.seenIds || []);
+    const newIds = matchIds.filter(id => !prevSeen.has(id));
+    newIds.forEach(id=>{
+      const vehicle = lastNearbyVehicles.find(v=>v.id===id);
+      if(vehicle) notifyScooterFound(w, vehicle);
+    });
+    if(newIds.length || matchIds.length !== w.seenIds?.length){
+      w.seenIds = matchIds;
+      changed = true;
+    }
+  });
+  if(changed) saveWatches(watches);
+}
+
+
+
+/* =====================================================================
+   ROUTENPLANUNG
+   Zielsuche: Nominatim (OpenStreetMap) - dieselbe Quelle, die die App
+   bereits fuers Reverse-Geocoding des Stadtnamens nutzt.
+   Routing: OSRM oeffentlicher Demo-Server (router.project-osrm.org) -
+   eine der bekanntesten Open-Source-Routing-Loesungen, hier ohne
+   eigenen API-Key ueber den kostenlosen Demo-Endpunkt genutzt.
+   EHRLICHER HINWEIS: Der OSRM-Demo-Server bietet kein eigenes
+   "E-Scooter"-Profil an. Verwendet wird das "cycling"-Profil als
+   naeherungsweise beste verfuegbare Annahme fuer eine Scooter-Fahrt
+   (bevorzugt Rad-/Nebenwege) - das ist eine Annaeherung, keine exakte
+   Scooter-Routenfuehrung. Der Demo-Server ist zudem nur fuer leichte
+   Nutzung/Tests gedacht, nicht fuer produktive Lastspitzen.
+   ===================================================================== */
+
+const OSRM_BASE = 'https://router.project-osrm.org';
+const routeOverlay = document.getElementById('routeOverlay');
+const routeSearchInput = document.getElementById('routeSearchInput');
+const routeSuggestions = document.getElementById('routeSuggestions');
+const routeResult = document.getElementById('routeResult');
+let routeLayer = L.layerGroup().addTo(map);
+let destMarker = null;
+
+function openRoute(){
+  routeOverlay.classList.add('show');
+  routeSearchInput.value = '';
+  routeSuggestions.innerHTML = '';
+  routeResult.innerHTML = '';
+  setTimeout(()=> routeSearchInput.focus(), 300);
+  if(!userPos){
+    routeSuggestions.innerHTML = '<div class="empty">Ermittle deinen Standort …</div>';
+    locateAndLoad();
+  }
+}
+function closeRoute(){ routeOverlay.classList.remove('show'); }
+
+document.getElementById('routeBtn').addEventListener('click', openRoute);
+document.getElementById('routeClose').addEventListener('click', closeRoute);
+routeOverlay.addEventListener('click', (e)=>{ if(e.target === routeOverlay) closeRoute(); });
+
+let routeSearchTimer = null;
+routeSearchInput.addEventListener('input', ()=>{
+  clearTimeout(routeSearchTimer);
+  const q = routeSearchInput.value.trim();
+  if(q.length < 3){ routeSuggestions.innerHTML = ''; return; }
+  routeSuggestions.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
+  routeSearchTimer = setTimeout(()=> searchDestination(q), 400); // Debounce
+});
+
+async function searchDestination(q){
+  try{
+    let url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=1&limit=5`;
+    if(userPos){
+      // Ergebnisse in der Naehe des Standorts bevorzugen (grosszuegige Box).
+      const d = 0.5;
+      url += `&viewbox=${userPos.lon-d},${userPos.lat+d},${userPos.lon+d},${userPos.lat-d}&bounded=0`;
+    }
+    const res = await fetch(url, { headers: { 'Accept-Language':'de' } });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    renderDestinationSuggestions(results);
+  }catch(err){
+    routeSuggestions.innerHTML = '<div class="empty">Suche gerade nicht möglich.</div>';
+  }
+}
+
+function renderDestinationSuggestions(results){
+  routeSuggestions.innerHTML = '';
+  if(!results.length){
+    routeSuggestions.innerHTML = '<div class="empty">Kein Ziel gefunden.</div>';
+    return;
+  }
+  results.forEach(r=>{
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div class="rowinfo">
+        <div class="name">${escapeHtml(r.name || r.display_name.split(',')[0])}</div>
+        <div class="meta">${escapeHtml(r.display_name)}</div>
+      </div>
+    `;
+    row.addEventListener('click', ()=> selectDestination(r));
+    routeSuggestions.appendChild(row);
+  });
+}
+
+async function selectDestination(r){
+  routeSuggestions.innerHTML = '';
+  routeSearchInput.value = r.name || r.display_name.split(',')[0];
+  routeResult.innerHTML = '<div class="empty loading-pulse">Route wird berechnet …</div>';
+
+  if(!userPos){
+    routeResult.innerHTML = '<div class="empty">Standort wird noch ermittelt – bitte kurz warten.</div>';
+    return;
+  }
+
+  const destLat = Number(r.lat), destLon = Number(r.lon);
+  try{
+    const url = `${OSRM_BASE}/route/v1/cycling/${userPos.lon},${userPos.lat};${destLon},${destLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if(json.code !== 'Ok' || !json.routes?.length) throw new Error('keine Route');
+    drawRoute(json.routes[0], destLat, destLon, r.display_name);
+  }catch(err){
+    routeResult.innerHTML = '<div class="empty">Route konnte nicht berechnet werden. Anderes Ziel versuchen.</div>';
+  }
+}
+
+function drawRoute(route, destLat, destLon, destLabel){
+  routeLayer.clearLayers();
+  const latlngs = route.geometry.coordinates.map(([lon,lat]) => [lat, lon]);
+  const line = L.polyline(latlngs, { color:'#4EA8FF', weight:5, opacity:.85 }).addTo(routeLayer);
+  destMarker = L.circleMarker([destLat, destLon], { radius:8, color:'#0A0E12', weight:2, fillColor:'#4EA8FF', fillOpacity:1 }).addTo(routeLayer);
+
+  map.flyToBounds(line.getBounds(), { padding:[50,50], duration:0.9 });
+
+  const distKm = (route.distance/1000).toFixed(1);
+  const minutes = Math.round(route.duration/60);
+
+  renderRouteResult({ distKm, minutes, destLabel });
+}
+
+/* Preisschaetzung: nutzt den naechstgelegenen aktuell sichtbaren Scooter
+   als Grundlage (Entsperrgebuehr + Minutenpreis * geschaetzte Fahrzeit aus
+   der Route) - echte GBFS-Preisdaten, keine erfundenen Betraege. Ohne
+   verfuegbaren Scooter/Preis wird das auch so angezeigt. */
+async function renderRouteResult({ distKm, minutes, destLabel }){
+  routeResult.innerHTML = `
+    <div class="route-result">
+      <div class="detail-stats">
+        <div class="detail-stat"><b>${distKm} km</b><span>Entfernung</span></div>
+        <div class="detail-stat"><b>ca. ${minutes} Min.</b><span>Fahrzeit</span></div>
+        <div class="detail-stat"><b id="routePriceValue">…</b><span>Preis</span></div>
+      </div>
+      <div class="route-price-note" id="routePriceNote">Preis wird geschätzt …</div>
+      <div class="detail-btn fallback" id="clearRouteBtn" style="margin-top:14px;">Route löschen</div>
+    </div>
+  `;
+  document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
+    routeLayer.clearLayers();
+    routeResult.innerHTML = '';
+    routeSearchInput.value = '';
+  });
+
+  const nearest = [...vehiclesById.values()]
+    .filter(v => v.dist != null)
+    .sort((a,b) => a.dist - b.dist)[0];
+
+  const priceEl = document.getElementById('routePriceValue');
+  const noteEl = document.getElementById('routePriceNote');
+  if(!nearest){
+    priceEl.textContent = 'nicht verfügbar';
+    noteEl.textContent = 'Kein Scooter in der Nähe geladen, um einen Preis zu schätzen.';
+    return;
+  }
+  const pricing = await getSystemPricing(nearest.systemId);
+  if(!pricing || (pricing.unlock == null && pricing.perMin == null)){
+    priceEl.textContent = 'nicht verfügbar';
+    noteEl.textContent = `Für den nächstgelegenen Scooter (${PROVIDER_META[nearest.provider].name}) liegt keine Preisangabe vor.`;
+    return;
+  }
+  const unlock = pricing.unlock ?? 0;
+  const perMin = pricing.perMin ?? 0;
+  const est = unlock + perMin * minutes;
+  priceEl.textContent = `ca. ${est.toFixed(2)} ${pricing.currency || '€'}`;
+  noteEl.textContent = `Voraussichtlicher Preis, geschätzt anhand des nächstgelegenen ${PROVIDER_META[nearest.provider].name}-Scooters (${metersLabel(nearest.dist)} entfernt) – kein garantierter Endpreis.`;
+}
+
+
 
 async function getRelevantSystems(){
   if(systemsCache) return systemsCache;
@@ -626,10 +1058,12 @@ async function fetchSystemVehicles(systemId, provider){
       .filter(b => b.lat && b.lon)
       .map(b => ({
         id: `${provider}_${b.bike_id ?? b.vehicle_id ?? b.id}`,
+        rawId: String(b.bike_id ?? b.vehicle_id ?? b.id ?? ''),
         provider,
         systemId,
         lat: b.lat, lon: b.lon,
         battery: readBatteryPercent(b),
+        rangeMeters: b.current_range_meters != null ? Number(b.current_range_meters) : null,
         rentalUri: b.rental_uris || null
       }));
   }catch(err){
@@ -782,12 +1216,11 @@ function renderVehicles(vehicles){
 }
 
 async function loadNearby(){
-  setStatus('Lade Sharing-Systeme in der Region …');
-  scooterList.innerHTML = '<div class="empty loading-pulse">Lade Standorte …</div>';
+  setStatus('Suche läuft …');
+  scooterList.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
 
   const systems = await getRelevantSystems();
 
-  setStatus(`Frage ${systems.length} Systeme ab …`);
   const results = await Promise.all(systems.map(s => fetchSystemVehicles(s.id, s.provider)));
   let vehicles = results.flat();
 
@@ -805,6 +1238,7 @@ async function loadNearby(){
 
   lastNearbyVehicles = vehicles;
   renderVehicles(lastNearbyVehicles);
+  checkScooterWatches();
   // Bewusst KEIN automatisches Aus-/Einzoomen mehr auf alle gefundenen
   // Scooter hier - die Karte soll beim Standort bleiben (siehe flyToUser
   // in locateAndLoad), nicht bei jedem Ladevorgang neu herausspringen.
@@ -1711,7 +2145,13 @@ profileBack.addEventListener('click', ()=>{
   goProfile(profileView === 'edit' ? 'account' : 'menu');
 });
 
-document.getElementById('locateBtn').addEventListener('click', locateAndLoad);
+document.getElementById('locateBtn').addEventListener('click', ()=>{
+  if(ROTATE_SUPPORTED && Math.abs(map.getBearing()) > 1){
+    map.setBearing(0); // erst Norden ausrichten, Position bleibt erhalten
+  }else{
+    locateAndLoad(); // schon nach Norden ausgerichtet -> auf Standort zentrieren
+  }
+});
 locateAndLoad();
 
 /* ---------- Aufziehbares Bottom-Sheet (Karte <-> Liste) ---------- */
