@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combine – Scooter finden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#10161B; --surface:#1B232A; --surface-2:#232D35; --ink:#F1EFE6; --ink-soft:#8FA0A8;
+    --line:#2C383F; --line-soft:#212A31; --accent:#FFB627; --accent-ink:#3E2900;
+    --ok:#57D38C; --err:#FF7A5C; --nav-bg:#0A0E12; --nav-ink:#F1EFE6;
+    --radius-lg:22px; --radius-md:14px; --radius-sm:9px;
+    --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif;
+    --ease-out:cubic-bezier(.16,1,.3,1); --ease-standard:cubic-bezier(.4,0,.2,1); --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  }
+  .phone.theme-light{
+    --bg:#EFF1EA; --surface:#FFFFFF; --surface-2:#E9EBE2; --ink:#14170F; --ink-soft:#565F55;
+    --line:#D6D9CC; --line-soft:#E4E6DC; --accent:#C2410C; --accent-ink:#FFFFFF;
+    --nav-bg:#161A15; --nav-ink:#F1EFE6; --ok:#1E8E4F; --err:#C0392B;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:#05070A; font-family:var(--font-body); color:var(--ink); }
+  .stage{ min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:28px 12px; }
+  .phone{ width:390px; max-width:100%; height:830px; background:var(--bg); border-radius:38px; overflow:hidden; position:relative; border:8px solid #000; box-shadow:0 30px 70px rgba(0,0,0,.55); display:flex; flex-direction:column; }
+  .notch{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:22px; background:#000; border-radius:0 0 14px 14px; z-index:500; }
+
+  .topbar{ padding:34px 16px 10px; background:var(--bg); position:relative; z-index:20; }
+  .topbar-row{ display:flex; align-items:center; gap:10px; }
+  .brand{ font-family:var(--font-display); font-weight:700; font-size:20px; letter-spacing:-.02em; color:var(--ink); }
+  .brand span{ color:var(--accent); }
+  .city-label{ font-family:var(--font-display); font-size:13.5px; font-weight:600; color:var(--ink); margin-top:6px; min-height:17px; }
+  .nearby-count{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; min-height:14px; }
+  .map-fab{
+    position:absolute; right:12px; width:42px; height:42px; border-radius:50%;
+    background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 6px 16px rgba(0,0,0,.35); z-index:12;
+    transition:opacity .25s var(--ease-standard), transform .18s var(--ease-spring), background .2s var(--ease-standard), box-shadow .2s var(--ease-standard);
+  }
+  .map-fab:hover{ box-shadow:0 8px 20px rgba(0,0,0,.45); }
+  .map-fab:active{ transform:scale(.88); }
+  #filterBtn{ bottom:154px; }
+  #locateBtn{ bottom:104px; }
+  .map-fab.active{ background:var(--accent); border-color:var(--accent); }
+  .map-fab.active svg{ stroke:var(--accent-ink); }
+  .mapscreen.sheet-expanded .map-fab{ opacity:0; transform:scale(.7); pointer-events:none; }
+  .status{ margin-top:10px; font-size:11.5px; color:var(--ink-soft); min-height:14px; font-weight:500; }
+  .status.live{ color:var(--ok); }
+  .status.err{ color:var(--err); }
+
+  .mapwrap{ position:absolute; top:10px; left:14px; right:14px; bottom:10px; border-radius:var(--radius-lg); overflow:hidden; border:1px solid var(--line); }
+  #map{ position:absolute; inset:0; filter:saturate(.85) brightness(.95); }
+  .leaflet-popup-content-wrapper{ border-radius:14px; font-family:var(--font-body); background:var(--surface); color:var(--ink); }
+  .leaflet-popup-tip{ background:var(--surface); }
+  .leaflet-popup-content b{ font-family:var(--font-display); }
+  .pop-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .popbtn{ display:inline-block; margin-top:8px; padding:9px 13px; background:var(--accent); color:var(--accent-ink); border-radius:9px; font-family:var(--font-display); font-weight:700; font-size:12.5px; text-decoration:none; }
+
+  .sheet{
+    position:absolute; left:14px; right:14px; bottom:10px; z-index:15;
+    height:460px; display:flex; flex-direction:column;
+    background:var(--surface); border-radius:22px; box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    border:1px solid var(--line);
+    transform:translateY(376px); /* collapsed: nur Grabber + Kopfzeile sichtbar */
+    transition:transform .42s cubic-bezier(.22,.9,.32,1);
+    touch-action:none;
+  }
+  .sheet.expanded{ transform:translateY(0); }
+  .sheet.dragging{ transition:none; }
+  .sheet-handle{ padding:12px 18px 8px; cursor:grab; flex:0 0 auto; }
+  .sheet-handle:active{ cursor:grabbing; }
+  .grabber{ width:38px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 10px; transition:background .2s var(--ease-standard), width .2s var(--ease-standard); }
+  .sheet-handle:active .grabber{ background:var(--accent); width:46px; }
+  .sheet-summary{ font-size:13px; font-weight:600; text-align:center; }
+  .sheet-summary span{ font-weight:500; color:var(--ink-soft); }
+  .list{ flex:1; min-height:0; overflow-y:auto; padding:0 18px 14px; }
+  .row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line-soft); cursor:pointer; border-radius:12px; transition:background .15s var(--ease-standard); }
+  .row:last-child{ border-bottom:none; }
+  .row:hover{ background:var(--surface-2); }
+  .row:active{ background:var(--surface-2); transform:scale(.99); }
+  .logo{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .logo svg{ width:18px; height:18px; }
+  .rowinfo{ flex:1; min-width:0; }
+  .rowinfo .name{ font-size:13px; font-weight:600; }
+  .rowinfo .meta{ font-size:11.5px; color:var(--ink-soft); }
+  .goto{ padding:7px 11px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-size:11.5px; font-weight:600; color:var(--ink); text-decoration:none; transition:background .15s var(--ease-standard), transform .15s var(--ease-spring); }
+  .goto:hover{ background:var(--line-soft); }
+  .goto:active{ transform:scale(.92); }
+  .chevron{ color:var(--ink-soft); flex:0 0 auto; }
+  .empty{ font-size:12.5px; color:var(--ink-soft); padding:14px 4px; text-align:center; }
+  @keyframes softPulse{ 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+  .loading-pulse{ animation:softPulse 1.3s ease-in-out infinite; }
+
+  .user-marker{ width:22px; height:22px; position:relative; }
+  .user-marker .ring{ position:absolute; inset:-9px; border-radius:50%; background:#4EA8FF; opacity:.28; animation:pulse 2s ease-out infinite; }
+  .user-marker .core{ position:absolute; inset:5px; border-radius:50%; background:#4EA8FF; border:3px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
+  @keyframes pulse{ 0%{ transform:scale(.6); opacity:.5; } 100%{ transform:scale(1.6); opacity:0; } }
+
+  .map-pin{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.45); cursor:pointer; }
+  .map-pin svg{ width:16px; height:16px; }
+
+  @keyframes screenIn{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  .mapscreen{ flex:1; min-height:0; position:relative; animation:screenIn .32s var(--ease-out); }
+  .mapscreen.hidden{ display:none; }
+
+  .providersscreen{ flex:1; min-height:0; display:none; flex-direction:column; padding:16px 18px 0; overflow-y:auto; }
+  .providersscreen.show{ display:flex; animation:screenIn .32s var(--ease-out); }
+  .providers-head{ margin-bottom:6px; }
+  .providers-title{ font-family:var(--font-display); font-size:19px; font-weight:700; }
+  .providers-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:4px; line-height:1.5; }
+  #providerList .row{ cursor:default; padding:12px 4px; }
+  #providerList .row:hover, #providerList .row:active{ background:transparent; transform:none; }
+  #providerList .rowinfo .meta{ margin-top:1px; }
+
+  .toggle{ position:relative; width:44px; height:26px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); flex:0 0 auto; cursor:pointer; transition:background .25s var(--ease-standard), border-color .25s var(--ease-standard); }
+  .toggle:active .knob{ width:24px; }
+  .toggle .knob{ position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--ink-soft); transition:transform .3s var(--ease-spring), background .25s var(--ease-standard), width .15s var(--ease-standard); }
+  .toggle.on{ background:var(--accent); border-color:var(--accent); }
+  .toggle.on .knob{ transform:translateX(18px); background:var(--accent-ink); }
+  .toggle.on:active .knob{ transform:translateX(14px); }
+
+  .nav{ background:var(--nav-bg); display:flex; padding:10px 6px 14px; z-index:20; border-top:1px solid #000; }
+  .navitem{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; color:#5B666D; cursor:pointer; position:relative; padding-top:4px; transition:color .2s var(--ease-standard); }
+  .navitem svg{ transition:transform .18s var(--ease-spring); }
+  .navitem:active svg{ transform:scale(.82); }
+  .navitem.active{ color:var(--accent); }
+  .navitem.active::before{ content:''; position:absolute; top:-4px; width:16px; height:3px; border-radius:3px; background:var(--accent); animation:navdot .25s var(--ease-spring); }
+  @keyframes navdot{ from{ width:0; opacity:0; } to{ width:16px; opacity:1; } }
+  .navitem svg{ width:20px; height:20px; }
+  .navitem span{ font-size:10px; font-weight:600; }
+
+  /* ---------- Scooter-Detailansicht ---------- */
+  .overlay{ position:absolute; inset:0; background:rgba(5,7,10,.6); z-index:200; display:flex; align-items:flex-end; opacity:0; pointer-events:none; transition:opacity .28s var(--ease-standard), backdrop-filter .28s var(--ease-standard); }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .detail{ width:100%; background:var(--surface); border-radius:26px 26px 0 0; padding:18px 20px 24px; transform:translateY(28px); transition:transform .38s var(--ease-out); border-top:1px solid var(--line); }
+  .overlay.show .detail{ transform:translateY(0); }
+  .detail-top{ display:flex; align-items:center; gap:12px; }
+  .detail-title{ font-family:var(--font-display); font-size:16.5px; font-weight:600; }
+  .detail-sub{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .detail-close{ margin-left:auto; width:30px; height:30px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; transition:background .15s var(--ease-standard), transform .15s var(--ease-spring); }
+  .detail-close:hover{ background:var(--line-soft); }
+  .detail-close:active{ transform:scale(.85) rotate(90deg); }
+  .detail-stats{ display:flex; gap:8px; margin:16px 0; }
+  .detail-stat{ flex:1; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px; text-align:center; }
+  .detail-stat b{ display:block; font-family:var(--font-display); font-size:15px; }
+  .detail-stat span{ font-size:10.5px; color:var(--ink-soft); }
+  .detail-btn{ width:100%; padding:15px; border:none; border-radius:var(--radius-md); background:var(--accent); color:var(--accent-ink); font-family:var(--font-display); font-weight:700; font-size:14.5px; text-align:center; display:block; text-decoration:none; cursor:pointer; box-shadow:0 6px 16px rgba(255,182,39,.25); transition:transform .15s var(--ease-spring), box-shadow .2s var(--ease-standard), background .2s var(--ease-standard); }
+  .detail-btn:hover{ box-shadow:0 8px 20px rgba(255,182,39,.35); }
+  .detail-btn:active{ transform:scale(.97); box-shadow:0 3px 10px rgba(255,182,39,.25); }
+  .detail-btn.fallback{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); box-shadow:none; }
+  .detail-note{ font-size:11px; color:var(--ink-soft); text-align:center; margin-top:10px; line-height:1.5; }
+
+  /* ---------- Filter-Overlay ---------- */
+  .filter-section{ margin:18px 0; }
+  .filter-label{ font-family:var(--font-display); font-size:13px; font-weight:600; margin-bottom:8px; display:flex; justify-content:space-between; }
+  .filter-label span{ color:var(--accent); font-weight:700; }
+  #filterProviderList .row{ cursor:default; padding:8px 2px; }
+  #filterProviderList .row:hover, #filterProviderList .row:active{ background:transparent; transform:none; }
+  .filter-slider{ width:100%; accent-color:var(--accent); }
+  .filter-check{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:8px; }
+  .filter-check input{ accent-color:var(--accent); width:16px; height:16px; }
+  .filter-check span{ display:flex; gap:6px; align-items:baseline; }
+  .filter-check span span{ color:var(--accent); font-weight:700; }
+  .filter-note{ font-size:10.5px; color:var(--ink-soft); line-height:1.5; margin-top:6px; }
+
+  /* ---------- Profil / Konto / Einstellungen ---------- */
+  .profile-head{ display:flex; align-items:center; gap:10px; }
+  .section-label{ font-family:var(--font-display); font-size:11.5px; font-weight:700; letter-spacing:.02em; color:var(--ink-soft); margin:18px 4px 6px; text-transform:uppercase; }
+  .section-label:first-child{ margin-top:2px; }
+  .profile-card{ display:flex; align-items:center; gap:14px; padding:16px 4px 20px; border-bottom:1px solid var(--line-soft); margin-bottom:4px; }
+  .profile-avatar{ width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:20px; flex:0 0 auto; }
+  .profile-card-name{ font-family:var(--font-display); font-size:16px; font-weight:700; }
+  .profile-card-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .field-input{ width:100%; padding:13px 14px; border-radius:var(--radius-md); border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-family:var(--font-body); font-size:14px; outline:none; transition:border-color .15s var(--ease-standard), box-shadow .15s var(--ease-standard); }
+  .field-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,182,39,.18); }
+  .field-label{ font-size:11.5px; color:var(--ink-soft); font-weight:600; margin:2px 2px 8px; }
+  .segmented{ display:flex; background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:3px; gap:3px; }
+  .segmented-opt{ flex:1; text-align:center; padding:9px 4px; border-radius:9px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; transition:background .2s var(--ease-standard), color .2s var(--ease-standard); }
+  .segmented-opt.on{ background:var(--accent); color:var(--accent-ink); }
+  .info-row{ padding:12px 4px; border-bottom:1px solid var(--line-soft); }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .info-label{ font-size:11.5px; color:var(--ink-soft); font-weight:600; }
+  .info-row .info-value{ font-size:13.5px; margin-top:2px; line-height:1.5; }
+  .status-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
+
+  /* ---------- Essen / Food-Vergleich ---------- */
+  .food-search{ display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:11px 14px; margin:2px 2px 14px; }
+  .food-search input{ border:none; outline:none; background:transparent; font-family:var(--font-body); font-size:14px; width:100%; color:var(--ink); }
+  .food-search input::placeholder{ color:var(--ink-soft); }
+  .food-lead{ font-family:var(--font-display); font-size:16px; font-weight:700; margin:4px 2px 10px; }
+  .cat-scroll{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 16px; scrollbar-width:none; }
+  .cat-scroll::-webkit-scrollbar{ display:none; }
+  .cat-chip{ flex:0 0 auto; padding:9px 14px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:12.5px; font-weight:600; cursor:pointer; transition:background .15s var(--ease-standard), color .15s var(--ease-standard); white-space:nowrap; }
+  .cat-chip.on{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+
+  .disclaimer-box{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:12px 14px; font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin:4px 2px 16px; }
+  .disclaimer-box b{ color:var(--ink); }
+
+  .provider-status-row{ display:flex; gap:6px; flex-wrap:wrap; margin:0 2px 14px; }
+  .provider-status-chip{ display:flex; align-items:center; gap:5px; padding:6px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:11px; font-weight:600; }
+
+  .rest-card{ display:flex; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line-soft); cursor:pointer; border-radius:12px; transition:background .15s var(--ease-standard); }
+  .rest-card:last-child{ border-bottom:none; }
+  .rest-card:hover{ background:var(--surface-2); }
+  .rest-card:active{ background:var(--surface-2); transform:scale(.99); }
+  .rest-thumb{ width:64px; height:64px; border-radius:14px; flex:0 0 auto; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:22px; overflow:hidden; }
+  .rest-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .rest-info{ flex:1; min-width:0; }
+  .rest-info .rest-name{ font-family:var(--font-display); font-size:14.5px; font-weight:700; }
+  .rest-info .rest-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .rest-info .rest-meta2{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .rest-providers{ display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; }
+  .rest-tag{ font-size:10.5px; font-weight:700; padding:3px 7px; border-radius:6px; color:#fff; }
+  .offer-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:6px; background:var(--ok); color:#08210F; margin-top:6px; }
+
+  .compare-row{ border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; margin-bottom:10px; }
+  .compare-top{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .compare-name{ font-family:var(--font-display); font-weight:700; font-size:14px; flex:1; }
+  .compare-stats{ display:flex; gap:14px; font-size:12.5px; color:var(--ink-soft); margin-bottom:12px; }
+  .compare-stats b{ color:var(--ink); font-weight:600; }
+
+  .menu-item-row{ padding:10px 4px; border-bottom:1px solid var(--line-soft); }
+  .menu-item-row:last-child{ border-bottom:none; }
+  .menu-item-top{ display:flex; justify-content:space-between; gap:10px; }
+  .menu-item-name{ font-size:13.5px; font-weight:600; }
+  .menu-item-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .menu-item-price{ font-family:var(--font-display); font-size:13px; font-weight:700; white-space:nowrap; }
+  .menu-item-price .orig{ text-decoration:line-through; color:var(--ink-soft); font-weight:500; font-size:11px; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="notch"></div>
+
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="brand">Combin<span>e</span></div>
+      </div>
+      <div class="city-label" id="cityLabel"></div>
+      <div class="nearby-count" id="nearbyCountLabel"></div>
+      <div class="status" id="statusLine">Ermittle deinen Standort …</div>
+    </div>
+
+    <div class="mapscreen" id="mapScreen">
+      <div class="mapwrap">
+        <div id="map"></div>
+        <div class="map-fab" id="filterBtn" title="Filter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        </div>
+        <div class="map-fab" id="locateBtn" title="Meinen Standort verwenden">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </div>
+      </div>
+
+      <div class="sheet" id="sheet">
+        <div class="sheet-handle" id="sheetHandle">
+          <div class="grabber"></div>
+          <div class="sheet-summary" id="sheetSummary">Scooter werden geladen…</div>
+        </div>
+        <div class="list" id="scooterList"><div class="empty">Lade Standorte …</div></div>
+      </div>
+    </div>
+
+    <div class="providersscreen" id="providersScreen">
+      <div class="providers-head">
+        <div class="providers-title">Anbieter</div>
+        <div class="providers-sub">Wähle aus, welche Scooter-Anbieter auf der Karte angezeigt werden.</div>
+      </div>
+      <div class="list" id="providerList"></div>
+    </div>
+
+    <div class="providersscreen" id="foodScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="foodBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="foodTitle">Essen</div>
+          <div class="providers-sub" id="foodSub">Restaurants mehrerer Lieferdienste vergleichen.</div>
+        </div>
+      </div>
+      <div class="list" id="foodContent" style="padding:0 2px;"></div>
+    </div>
+
+    <div class="providersscreen" id="profileScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="profileBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="profileTitle">Profil</div>
+          <div class="providers-sub" id="profileSub">Dein lokales Profil auf diesem Gerät.</div>
+        </div>
+      </div>
+      <div class="list" id="profileContent" style="padding:0 2px;"></div>
+    </div>
+
+    <div class="nav">
+      <div class="navitem active" data-tab="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-2V4l6 2 6-2 6 2v14l-6-2-6 2z"/><path d="M9 6v14M15 4v14"/></svg><span>Karte</span></div>
+      <div class="navitem" data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a2 2 0 002 2h0a2 2 0 002-2V3M8 12v9M17 3c-1.7 0-3 2.2-3 5s1.3 5 3 5v9"/></svg><span>Essen</span></div>
+      <div class="navitem" data-tab="providers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Anbieter</span></div>
+      <div class="navitem" data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span>Profil</span></div>
+    </div>
+
+    <div class="overlay" id="detailOverlay">
+      <div class="detail" id="detailBody"></div>
+    </div>
+
+    <div class="overlay" id="filterOverlay">
+      <div class="detail" id="filterBody">
+        <div class="detail-top">
+          <div>
+            <div class="detail-title">Filter</div>
+            <div class="detail-sub">Anbieter, Umkreis und Preis für die Kartenansicht</div>
+          </div>
+          <div class="detail-close" id="filterClose">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-label">Anbieter</div>
+          <div id="filterProviderList"></div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-label">Anzeige-Radius <span id="radiusValue"></span></div>
+          <input type="range" id="radiusSlider" class="filter-slider" min="1" max="150" step="1">
+        </div>
+
+        <div class="filter-section">
+          <label class="filter-check">
+            <input type="checkbox" id="priceFilterToggle">
+            <span>Maximalpreis pro Minute <span id="priceValue"></span></span>
+          </label>
+          <input type="range" id="priceSlider" class="filter-slider" min="0.10" max="1.00" step="0.05" disabled>
+          <div class="filter-note">Nur Fahrzeuge, für die uns eine Anbieter-Preisangabe vorliegt, werden nach Preis gefiltert – Fahrzeuge ohne bekannten Preis bleiben sichtbar.</div>
+        </div>
+
+        <div class="detail-btn" id="filterDone">Fertig</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Live-Datenquelle: MobiData BW - die offene Mobilitaetsdatenplattform des
+  Landes Baden-Wuerttemberg (api.mobidata-bw.de). Sie buendelt die offenen
+  GBFS-Feeds aller Sharing-Anbieter (u.a. Dott, Bolt, Voi, Lime) ohne
+  Zugangsdaten. Wir laden das zentrale Manifest, filtern die Systeme der
+  vier gewuenschten Anbieter und fragen deren Fahrzeugstandorte live ab.
+  Quelle: https://api.mobidata-bw.de/
+
+  Hinweis zu den Badges: Es werden bewusst KEINE echten Markenlogos
+  verwendet (geschuetzte Markenzeichen der Anbieter), sondern eigens
+  gestaltete Monogramm-Icons in den jeweiligen Markenfarben.
+*/
+
+const MANIFEST_URL = 'https://api.mobidata-bw.de/sharing/gbfs/v3/manifest.json';
+function feedUrl(systemId, feedName){ return `https://api.mobidata-bw.de/sharing/gbfs/v2/${systemId}/${feedName}`; }
+
+const PROVIDER_META = {
+  dott: { name: "Dott", color: "#000000", homepage: "https://ridedott.com" },
+  bolt: { name: "Bolt", color: "#34D186", homepage: "https://bolt.eu/en/rides/" },
+  voi:  { name: "Voi",  color: "#0A5C48", homepage: "https://www.voiapp.io" },
+  lime: { name: "Lime", color: "#00B14F", homepage: "https://li.me" },
+  zeus: { name: "Zeus", color: "#3B6EF6", homepage: "https://zeusscooters.com/" },
+  yoio: { name: "Yoio", color: "#FF8A3D", homepage: "https://apps.apple.com/app/id1500759294" },
+  hopp: { name: "Hopp", color: "#7C5CFC", homepage: "https://hopp.bike/" }
+};
+
+const LOGO_SVG = {
+  dott: '<svg viewBox="0 0 24 24" fill="#fff"><circle cx="7" cy="12" r="3.2"/><circle cx="17" cy="12" r="3.2"/></svg>',
+  lime: '<svg viewBox="0 0 24 24" fill="none" stroke="#0B2E0F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19C5 10 11 5 19 5c0 8-5 14-14 14z"/><path d="M8 16C10 12 13 9 17 7"/></svg>',
+  voi:  '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 12 7-12"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="#0B2E0F"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+  zeus: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">Z</text></svg>',
+  yoio: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">Y</text></svg>',
+  hopp: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">H</text></svg>',
+  wolt: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">W</text></svg>',
+  ubereats: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">U</text></svg>',
+  lieferando: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">L</text></svg>'
+};
+
+function logoHtml(key, color){
+  return `<div class="logo" style="background:${color}">${LOGO_SVG[key]}</div>`;
+}
+
+function providerFromSystemId(id){
+  if(id.startsWith('dott_')) return 'dott';
+  if(id.startsWith('bolt_')) return 'bolt';
+  if(id.startsWith('voi_'))  return 'voi';
+  if(id.startsWith('lime_')) return 'lime';
+  if(id.startsWith('zeus_')) return 'zeus';
+  if(id.startsWith('yoio_')) return 'yoio';
+  if(id.startsWith('hopp_')) return 'hopp';
+  return null;
+}
+
+function haversineMeters(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distLabel(v){
+  if(v.dist == null) return null;
+  return v.dist < 950 ? Math.round(v.dist/10)*10 + ' m' : (v.dist/1000).toFixed(1) + ' km';
+}
+
+let maxRadiusM = 6000;
+let maxPricePerMin = null; // null = kein Preislimit aktiv
+let userPos = null;
+let systemsCache = null;
+let lastNearbyVehicles = [];
+let activeProviders = new Set(Object.keys(PROVIDER_META));
+
+const statusLine = document.getElementById('statusLine');
+const cityLabel = document.getElementById('cityLabel');
+const nearbyCountLabel = document.getElementById('nearbyCountLabel');
+const scooterList = document.getElementById('scooterList');
+const mapScreen = document.getElementById('mapScreen');
+const providersScreen = document.getElementById('providersScreen');
+const providerList = document.getElementById('providerList');
+const foodScreen = document.getElementById('foodScreen');
+const foodContent = document.getElementById('foodContent');
+const foodTitle = document.getElementById('foodTitle');
+const foodSub = document.getElementById('foodSub');
+const foodBack = document.getElementById('foodBack');
+const profileScreen = document.getElementById('profileScreen');
+const profileContent = document.getElementById('profileContent');
+const profileTitle = document.getElementById('profileTitle');
+const profileSub = document.getElementById('profileSub');
+const profileBack = document.getElementById('profileBack');
+const sheet = document.getElementById('sheet');
+const sheetHandle = document.getElementById('sheetHandle');
+const sheetSummary = document.getElementById('sheetSummary');
+const filterBtn = document.getElementById('filterBtn');
+const filterOverlay = document.getElementById('filterOverlay');
+const filterProviderList = document.getElementById('filterProviderList');
+const radiusSlider = document.getElementById('radiusSlider');
+const radiusValue = document.getElementById('radiusValue');
+const priceFilterToggle = document.getElementById('priceFilterToggle');
+const priceSlider = document.getElementById('priceSlider');
+const priceValue = document.getElementById('priceValue');
+
+function setStatus(text, cls){
+  statusLine.textContent = text;
+  statusLine.className = 'status' + (cls ? ' ' + cls : '');
+  sheetSummary.textContent = text;
+}
+
+/* ---------- Karte ---------- */
+const map = L.map('map', { zoomControl:false }).setView([48.5216, 9.0576], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap-Mitwirkende', maxZoom: 19
+}).addTo(map);
+L.control.zoom({ position:'topright' }).addTo(map);
+
+let userMarker = null;
+let scooterLayer = L.layerGroup().addTo(map);
+
+const USER_ICON = L.divIcon({
+  className: '', html: '<div class="user-marker"><div class="ring"></div><div class="core"></div></div>',
+  iconSize:[22,22], iconAnchor:[11,11]
+});
+
+function placeUserMarker(lat, lon){
+  if(userMarker) map.removeLayer(userMarker);
+  userMarker = L.marker([lat, lon], { icon: USER_ICON, zIndexOffset: 1000 }).addTo(map);
+}
+
+/* ---------- Plattform-Erkennung (fuer rental_uris.android / .ios / .web) ---------- */
+function detectPlatform(){
+  const ua = navigator.userAgent || navigator.vendor || '';
+  if(/android/i.test(ua)) return 'android';
+  if(/iPad|iPhone|iPod/.test(ua)) return 'ios';
+  return 'web';
+}
+
+/*
+  Waehlt EXAKT den vom GBFS-Feed fuer dieses eine Fahrzeug gelieferten
+  rental_uris-Link - nichts wird konstruiert oder erraten.
+  Reihenfolge: passender Plattform-Link (android/ios) -> web-Link als
+  fahrzeugspezifischer Fallback -> null, wenn fuer dieses Fahrzeug ueberhaupt
+  kein rental_uris vorhanden ist.
+*/
+function pickVehicleDeepLink(v){
+  if(!v.rentalUri) return null;
+  const platform = detectPlatform();
+  const platformUrl = v.rentalUri[platform];
+  if(platformUrl) return { url: platformUrl, specific: true };
+  if(v.rentalUri.web) return { url: v.rentalUri.web, specific: true };
+  return null;
+}
+
+let vehiclesById = new Map();
+
+function openDetail(v){
+  const p = PROVIDER_META[v.provider];
+  const dl = distLabel(v);
+  const link = pickVehicleDeepLink(v);
+
+  const stats = `
+    <div class="detail-stats">
+      <div class="detail-stat"><b>${v.battery !== null ? v.battery + '%' : '–'}</b><span>Akku</span></div>
+      <div class="detail-stat"><b>${dl || '–'}</b><span>Entfernung</span></div>
+      <div class="detail-stat"><b>${p.name}</b><span>Anbieter</span></div>
+    </div>
+  `;
+
+  let action, note;
+  if(link){
+    // Fahrzeugspezifischer Deep-Link vorhanden -> genau diesen verwenden.
+    action = `<a class="detail-btn" id="startRideBtn" href="${link.url}" target="_blank" rel="noopener">Fahrt starten</a>`;
+    note = `Öffnet genau diesen Scooter in der ${p.name}-App.`;
+  }else{
+    // Kein fahrzeugspezifischer Deep-Link im Feed -> KEIN "Scooter öffnen"-
+    // Button, stattdessen ein klar anders beschrifteter, ehrlicher Fallback
+    // auf die offizielle Anbieter-Seite (kein erfundener Deep-Link). Wird
+    // NICHT als Fahrt protokolliert, da kein konkretes Fahrzeug geoeffnet wird.
+    action = `<a class="detail-btn fallback" href="${p.homepage}" target="_blank" rel="noopener">${p.name}-App öffnen</a>`;
+    note = `Für dieses Fahrzeug liefert der Datenfeed keinen fahrzeugspezifischen Deep-Link – daher nur ein allgemeiner Link zu ${p.name}.`;
+  }
+
+  detailBody.innerHTML = `
+    <div class="detail-top">
+      ${logoHtml(v.provider, p.color)}
+      <div>
+        <div class="detail-title">${p.name} Scooter</div>
+        <div class="detail-sub">${v.id}</div>
+      </div>
+      <div class="detail-close" id="detailClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    ${stats}
+    ${action}
+    <div class="detail-note">${note}</div>
+  `;
+  detailBody.querySelector('#detailClose').addEventListener('click', closeDetail);
+  detailOverlay.classList.add('show');
+}
+
+function closeDetail(){
+  detailOverlay.classList.remove('show');
+}
+
+function selectScooter(id){
+  const v = vehiclesById.get(id);
+  if(!v) return; // Fahrzeug nicht (mehr) im aktuellen Datenstand
+  map.flyTo([v.lat, v.lon], 17, { duration:0.7, easeLinearity:0.25 });
+  openDetail(v);
+}
+
+const detailOverlay = document.getElementById('detailOverlay');
+const detailBody = document.getElementById('detailBody');
+detailOverlay.addEventListener('click', (e)=>{ if(e.target === detailOverlay) closeDetail(); });
+
+async function getRelevantSystems(){
+  if(systemsCache) return systemsCache;
+  const res = await fetch(MANIFEST_URL);
+  const json = await res.json();
+  const all = json.data.datasets.map(d => d.system_id);
+  systemsCache = all
+    .map(id => ({ id, provider: providerFromSystemId(id) }))
+    .filter(s => s.provider);
+  return systemsCache;
+}
+
+async function fetchSystemVehicles(systemId, provider){
+  try{
+    const res = await fetch(feedUrl(systemId, 'free_bike_status'));
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const bikes = (json.data && (json.data.bikes || json.data.vehicles)) || [];
+    return bikes
+      .filter(b => b.lat && b.lon)
+      .map(b => ({
+        id: `${provider}_${b.bike_id ?? b.vehicle_id ?? b.id}`,
+        provider,
+        systemId,
+        lat: b.lat, lon: b.lon,
+        battery: b.current_fuel_percent != null ? Math.round(b.current_fuel_percent*100) : null,
+        rentalUri: b.rental_uris || null
+      }));
+  }catch(err){
+    return [];
+  }
+}
+
+/* ---------- Preisangaben je System (echter GBFS-Feed system_pricing_plans) ---------- */
+const pricingCache = {};
+async function getSystemPricing(systemId){
+  if(!systemId) return null;
+  if(pricingCache[systemId] !== undefined) return pricingCache[systemId];
+  try{
+    const res = await fetch(feedUrl(systemId, 'system_pricing_plans'));
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const plans = json?.data?.plans || [];
+    const plan = plans[0] || null;
+    if(!plan){ pricingCache[systemId] = null; return null; }
+    const perMinSegment = Array.isArray(plan.per_min_pricing) ? plan.per_min_pricing[0] : null;
+    const pricing = {
+      currency: plan.currency || null,
+      unlock: plan.price != null ? Number(plan.price) : null,
+      perMin: perMinSegment?.rate != null ? Number(perMinSegment.rate) : null
+    };
+    pricingCache[systemId] = pricing;
+    return pricing;
+  }catch(err){
+    pricingCache[systemId] = null;
+    return null;
+  }
+}
+
+function renderList(vehicles){
+  scooterList.innerHTML = '';
+  if(!vehicles.length){
+    scooterList.innerHTML = activeProviders.size === 0
+      ? '<div class="empty">Kein Anbieter ausgewählt – wähle unter „Anbieter" mindestens einen aus.</div>'
+      : `<div class="empty">Keine Scooter im Umkreis von ${(maxRadiusM/1000).toFixed(0)} km gefunden.</div>`;
+    return;
+  }
+  vehicles.slice(0, 60).forEach(v=>{
+    const p = PROVIDER_META[v.provider];
+    const dl = distLabel(v);
+    const meta = [dl ? dl + ' entfernt' : null, v.battery !== null ? v.battery + '% Akku' : null].filter(Boolean).join(' · ');
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.id = v.id;
+    row.innerHTML = `
+      ${logoHtml(v.provider, p.color)}
+      <div class="rowinfo">
+        <div class="name">${p.name} Scooter</div>
+        <div class="meta">${meta || 'Details unbekannt'}</div>
+      </div>
+      <div class="goto">Auswählen</div>
+    `;
+    row.addEventListener('click', ()=> selectScooter(row.dataset.id));
+    scooterList.appendChild(row);
+  });
+}
+
+const mapPinIconCache = {};
+function mapPinIcon(provider){
+  if(mapPinIconCache[provider]) return mapPinIconCache[provider];
+  const p = PROVIDER_META[provider];
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="map-pin" style="background:${p.color}">${LOGO_SVG[provider]}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+  mapPinIconCache[provider] = icon;
+  return icon;
+}
+
+function passesPriceFilter(v){
+  if(maxPricePerMin == null) return true; // Preisfilter deaktiviert
+  const pricing = pricingCache[v.systemId];
+  if(!pricing || pricing.perMin == null) return true; // unbekannter Preis wird nicht ausgeschlossen
+  return pricing.perMin <= maxPricePerMin;
+}
+
+let markersById = new Map();
+
+/* ---------- Stadtname zum Standort (echtes Reverse-Geocoding via OSM/Nominatim) ---------- */
+let cityLookupToken = 0;
+async function lookupCityName(lat, lon){
+  const token = ++cityLookupToken; // verwirft veraltete Antworten bei schnellem erneutem Orten
+  cityLabel.textContent = 'Ort wird ermittelt …';
+  try{
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language':'de' } });
+    if(token !== cityLookupToken) return;
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const a = json.address || {};
+    const city = a.city || a.town || a.village || a.municipality || a.county || null;
+    cityLabel.textContent = city || '';
+  }catch(err){
+    if(token === cityLookupToken) cityLabel.textContent = '';
+  }
+}
+
+/* ---------- Zaehler unter dem Stadtnamen: jetzt an den tatsaechlich
+   eingestellten Anzeige-Radius gekoppelt (maxRadiusM), statt an einen
+   fixen, unabhaengigen 1-km-Wert - zeigt also immer dieselbe Menge, die
+   auch auf der Karte/Liste sichtbar ist. ---------- */
+function updateNearbyCount(){
+  if(!userPos){ nearbyCountLabel.textContent = ''; return; }
+  const count = lastNearbyVehicles.filter(v =>
+    activeProviders.has(v.provider) && v.dist != null && v.dist <= maxRadiusM
+  ).length;
+  const radiusLabel = maxRadiusM < 1000 ? `${maxRadiusM} m` : `${(maxRadiusM/1000).toFixed(maxRadiusM % 1000 === 0 ? 0 : 1)} km`;
+  nearbyCountLabel.textContent = `${count} Scooter im Umkreis von ${radiusLabel}`;
+}
+
+function renderVehicles(vehicles){
+  const filtered = vehicles.filter(v =>
+    activeProviders.has(v.provider) &&
+    (userPos ? (v.dist != null && v.dist <= maxRadiusM) : true) &&
+    passesPriceFilter(v)
+  );
+
+  vehiclesById = new Map(filtered.map(v => [v.id, v]));
+
+  // Diffing statt Clear+Neuaufbau: bestehende Marker bleiben erhalten und
+  // werden nur bewegt, damit die Karte beim Filtern/Aktualisieren nicht
+  // sichtbar flackert.
+  const nextIds = new Set(filtered.map(v => v.id));
+  for(const [id, marker] of markersById){
+    if(!nextIds.has(id)){
+      scooterLayer.removeLayer(marker);
+      markersById.delete(id);
+    }
+  }
+  filtered.forEach(v=>{
+    let marker = markersById.get(v.id);
+    if(marker){
+      marker.setLatLng([v.lat, v.lon]);
+    }else{
+      marker = L.marker([v.lat, v.lon], { icon: mapPinIcon(v.provider) });
+      marker.on('click', ()=> selectScooter(v.id));
+      marker.addTo(scooterLayer);
+      markersById.set(v.id, marker);
+    }
+  });
+
+  if(userPos && filtered.length === 0){
+    setStatus(activeProviders.size === 0 ? 'Keine Anbieter ausgewählt.' : `Keine Scooter im Umkreis von ${(maxRadiusM/1000).toFixed(0)} km gefunden.`, 'err');
+  }else{
+    setStatus(userPos ? `${filtered.length} Scooter im Umkreis von ${(maxRadiusM/1000).toFixed(0)} km` : `${filtered.length} Scooter geladen`, 'live');
+  }
+  renderList(filtered);
+  updateNearbyCount();
+}
+
+async function loadNearby(){
+  setStatus('Lade Sharing-Systeme in der Region …');
+  scooterList.innerHTML = '<div class="empty loading-pulse">Lade Standorte …</div>';
+
+  const systems = await getRelevantSystems();
+
+  setStatus(`Frage ${systems.length} Systeme ab …`);
+  const results = await Promise.all(systems.map(s => fetchSystemVehicles(s.id, s.provider)));
+  let vehicles = results.flat();
+
+  if(userPos){
+    vehicles.forEach(v=> v.dist = haversineMeters(userPos.lat, userPos.lon, v.lat, v.lon));
+    vehicles.sort((a,b)=> a.dist - b.dist);
+  }
+
+  // Preise fuer alle betroffenen Systeme im Hintergrund laden, damit der
+  // Preisfilter direkt nutzbar ist, sobald der Nutzer ihn aktiviert.
+  const distinctSystemIds = [...new Set(vehicles.map(v => v.systemId))];
+  Promise.all(distinctSystemIds.map(getSystemPricing)).then(()=>{
+    renderVehicles(lastNearbyVehicles); // Preise nachtraeglich anwenden, falls Filter aktiv ist
+  });
+
+  lastNearbyVehicles = vehicles;
+  renderVehicles(lastNearbyVehicles);
+  // Bewusst KEIN automatisches Aus-/Einzoomen mehr auf alle gefundenen
+  // Scooter hier - die Karte soll beim Standort bleiben (siehe flyToUser
+  // in locateAndLoad), nicht bei jedem Ladevorgang neu herausspringen.
+}
+
+const INITIAL_ZOOM_RADIUS_M = 200;
+function flyToUser(lat, lon){
+  // Feste 200m-Ansicht um den Standort statt einer Zoomstufe, die je nach
+  // Breitengrad/Bildschirmgroesse unterschiedlich wirkt.
+  const bounds = L.latLng(lat, lon).toBounds(INITIAL_ZOOM_RADIUS_M * 2);
+  map.flyToBounds(bounds, { duration:1.1 });
+}
+
+let locating = false;
+function locateAndLoad(){
+  if(!navigator.geolocation){
+    setStatus('Standortzugriff nicht verfügbar.', 'err');
+    return;
+  }
+  if(locating) return; // verhindert ueberlappende Anfragen bei mehrfachem Tippen
+  locating = true;
+  setStatus('Ermittle deinen Standort …');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    locating = false;
+    const { latitude, longitude } = pos.coords;
+    userPos = { lat: latitude, lon: longitude };
+    placeUserMarker(latitude, longitude);
+    flyToUser(latitude, longitude);
+    loadNearby();
+    lookupCityName(latitude, longitude);
+  }, ()=>{
+    locating = false;
+    setStatus('Standortzugriff nicht erlaubt – tippe erneut auf das Standort-Symbol, sobald du ihn freigegeben hast.', 'err');
+  }, { enableHighAccuracy:true, timeout:8000 });
+}
+
+/* ---------- Generischer Distanz-Formatter (wird von Karte UND Essen genutzt) ---------- */
+function metersLabel(m){
+  if(m == null) return null;
+  return m < 950 ? Math.round(m/10)*10 + ' m' : (m/1000).toFixed(1) + ' km';
+}
+
+/* =====================================================================
+   ESSEN / FOOD-VERGLEICH
+
+   Datenquellen-Hinweis (siehe Chat-Analyse): Fuer Wolt, Uber Eats und
+   Lieferando existiert KEINE offizielle, oeffentlich zugaengliche API
+   fuer Restaurant-/Menue-Suche durch Drittanbieter-Apps:
+   - Wolt: die frueher genutzten consumer-api.wolt.com / restaurant-
+     api.wolt.com Endpunkte liefern inzwischen HTTP 410 Gone.
+   - Uber Eats: die "Marketplace API" ist nur fuer Restaurant-Partner
+     (eigene Filialen verwalten), erfordert schriftliche Freigabe von
+     Uber und ist nicht fuer Restaurantsuche durch Dritte gedacht.
+   - Lieferando (Just Eat Takeaway): keine oeffentliche API gefunden.
+   Alles was auffindbar war, sind kommerzielle, als "unofficial"
+   gekennzeichnete Scraper-Dienste - genau das soll hier NICHT
+   nachgebaut werden.
+
+   Deshalb: MockFoodProvider je Anbieter, klar als Demo-Daten markiert
+   (siehe disclaimer-box in der UI). Die Provider-Schnittstelle ist so
+   geschnitten, dass ein MockFoodProvider jederzeit durch eine echte,
+   offiziell freigegebene Partner-Implementierung ersetzt werden kann,
+   ohne den Rest der App (Matching, Sortierung, UI) anzufassen.
+
+   Internes Schema (siehe Kommentare) entspricht der Vorgabe:
+   Restaurant { id, provider, providerRestaurantId, name, image,
+     cuisineTypes, rating, distance, deliveryTime, deliveryFee,
+     minimumOrder, isOpen, offers, menu, deepLink }
+   MenuItem { id, provider, providerItemId, restaurantId, name,
+     description, image, price, originalPrice, discount, available,
+     options, deepLink }
+   Offer { id, title, description, discount, originalPrice,
+     finalPrice, conditions, deepLink }
+   ===================================================================== */
+
+const FOOD_PROVIDER_META = {
+  wolt:       { name:'Wolt',       color:'#00C2E8', homepage:'https://wolt.com' },
+  ubereats:   { name:'Uber Eats',  color:'#06C167', homepage:'https://www.ubereats.com' },
+  lieferando: { name:'Lieferando', color:'#FF8000', homepage:'https://www.lieferando.de' }
+};
+
+/* ---------- Provider-Interface ---------- */
+class FoodProvider{
+  constructor(key){ this.key = key; }
+  /** @returns {Promise<object[]>} rohe Restaurant-Objekte im internen Schema */
+  async searchRestaurants(userPos, query, filters){ throw new Error(`${this.key}: searchRestaurants nicht implementiert`); }
+  async getRestaurant(providerRestaurantId){ throw new Error(`${this.key}: getRestaurant nicht implementiert`); }
+  async getMenu(providerRestaurantId){ throw new Error(`${this.key}: getMenu nicht implementiert`); }
+  async getOffers(providerRestaurantId){ throw new Error(`${this.key}: getOffers nicht implementiert`); }
+  /** Liefert den Deep-Link fuer ein Restaurant oder Gericht. Bei fehlender
+   *  echter Datenquelle wird ehrlich nur die Anbieter-Startseite verwendet
+   *  statt einer erfundenen restaurant-spezifischen URL. */
+  getDeepLink(kind, ids){ return FOOD_PROVIDER_META[this.key].homepage; }
+}
+
+/** Versetzt einen Referenzpunkt um dx/dy Meter (kleine Distanzen, hinreichend genau). */
+function offsetLatLon(lat, lon, dxM, dyM){
+  const dLat = dyM / 111320;
+  const dLon = dxM / (111320 * Math.cos(lat * Math.PI / 180));
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+/** Mock-/Adapter-Provider: erfuellt exakt dieselbe Schnittstelle wie eine
+ *  echte Implementierung spaeter auch erfuellen wuerde. Die Restaurants
+ *  werden relativ zum jeweiligen Nutzerstandort platziert (kleiner,
+ *  deterministischer Versatz), damit "Restaurants in deiner Naehe" bei
+ *  jedem Standort plausibel wirkt - die Inhalte selbst sind Demo-Daten. */
+class MockFoodProvider extends FoodProvider{
+  constructor(key, seed){ super(key); this.seed = seed; }
+
+  async searchRestaurants(userPos, query){
+    if(!userPos) return [];
+    const q = (query || '').trim().toLowerCase();
+    return this.seed
+      .filter(s => !q || s.name.toLowerCase().includes(q) || s.cuisineTypes.some(c => c.toLowerCase().includes(q)))
+      .map(s => this._toRestaurant(s, userPos));
+  }
+  async getRestaurant(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toRestaurant(s, null) : null;
+  }
+  async getMenu(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toMenu(s) : [];
+  }
+  async getOffers(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toOffers(s) : [];
+  }
+  getDeepLink(){ return FOOD_PROVIDER_META[this.key].homepage; }
+
+  _toRestaurant(s, userPos){
+    const pos = userPos ? offsetLatLon(userPos.lat, userPos.lon, s.offset.dx, s.offset.dy) : null;
+    const distance = (userPos && pos) ? haversineMeters(userPos.lat, userPos.lon, pos.lat, pos.lon) : null;
+    return {
+      id: `${this.key}_${s.providerRestaurantId}`,
+      provider: this.key,
+      providerRestaurantId: s.providerRestaurantId,
+      name: s.name,
+      image: s.image || null,
+      cuisineTypes: s.cuisineTypes,
+      rating: s.rating ?? null,
+      distance,
+      deliveryTime: s.deliveryTime,
+      deliveryFee: s.deliveryFee,
+      minimumOrder: s.minimumOrder,
+      isOpen: s.isOpen,
+      pickupAvailable: !!s.pickupAvailable,
+      offers: this._toOffers(s),
+      menu: this._toMenu(s),
+      address: s.address || null,
+      lat: pos ? pos.lat : null,
+      lon: pos ? pos.lon : null,
+      deepLink: this.getDeepLink()
+    };
+  }
+  _toMenu(s){
+    return (s.menu || []).map(m => ({
+      id: `${this.key}_${m.providerItemId}`,
+      provider: this.key,
+      providerItemId: m.providerItemId,
+      restaurantId: `${this.key}_${s.providerRestaurantId}`,
+      name: m.name,
+      description: m.description || null,
+      image: m.image || null,
+      price: m.price,
+      originalPrice: m.originalPrice ?? null,
+      discount: m.originalPrice ? Math.round((1 - m.price / m.originalPrice) * 100) : null,
+      available: m.available !== false,
+      options: m.options || [],
+      deepLink: this.getDeepLink()
+    }));
+  }
+  _toOffers(s){
+    return (s.offers || []).map((o, i) => ({
+      id: `${this.key}_${s.providerRestaurantId}_offer${i}`,
+      title: o.title,
+      description: o.description || null,
+      discount: o.discount || null,
+      originalPrice: o.originalPrice ?? null,
+      finalPrice: o.finalPrice ?? null,
+      conditions: o.conditions || null,
+      deepLink: this.getDeepLink()
+    }));
+  }
+}
+
+/* =====================================================================
+   FOOD DATA SCRAPE - ADAPTER-SKELETT (bewusst NICHT aktiv verdrahtet)
+
+   WICHTIG - bitte lesen, bevor hier irgendetwas "scharf" geschaltet wird:
+   "Food Data Scrape" konnte nicht als eigenstaendiges, oeffentlich
+   dokumentiertes API-Produkt identifiziert werden. Es wurden dazu keine
+   Basis-URL, keine Authentifizierungsmethode, keine Endpunkt-Pfade und
+   keine Response-Feldnamen gefunden. Alles unten ist deshalb bewusst
+   TODO/PLACEHOLDER und wirft absichtlich einen Fehler, statt eine
+   erfundene URL anzufragen (siehe Vorgabe: "keine API-Endpunkte,
+   Parameter oder Response-Felder erfinden").
+
+   Sobald echte Doku/Credentials vorliegen, hier eintragen:
+   - TODO: Basis-URL der Food-Data-Scrape-API (z.B. https://api.<anbieter>.com/v1)
+   - TODO: Auth-Methode (Header? Query-Param? Bearer-Token?)
+   - TODO: Endpunkt fuer Restaurantsuche (Pfad, Query-Parameter fuer lat/lon)
+   - TODO: Endpunkt fuer Restaurant-Details
+   - TODO: Endpunkt fuer Menue
+   - TODO: Endpunkt fuer Angebote
+   - TODO: tatsaechliche Response-Feldnamen (die Mapping-Funktionen unten
+     sind Platzhalter und muessen an die echte Struktur angepasst werden)
+
+   ARCHITEKTUR-HINWEIS (siehe Punkt 13 der Aufgabe): Der API-Key darf nicht
+   im Frontend liegen. Diese Datei ist aktuell rein clientseitig (kein
+   eigenes Backend) - fuer eine echte Anbindung braucht es zwingend einen
+   kleinen Server, der den Key haelt und die Anfragen weiterleitet, z.B.:
+
+     Browser (diese App)
+       -> fetch('/api/food/search?lat=..&lon=..')      [kein Key hier]
+       -> eigenes Backend (Node/Express o.ae.)
+            liest process.env.FOOD_DATA_SCRAPE_API_KEY
+       -> https://<food-data-scrape-basis-url>/...      [Key nur hier]
+
+   Diese Datei ruft daher absichtlich NICHT direkt eine externe
+   Food-Data-Scrape-Domain auf - das waere ein Key-Leak im Frontend.
+   ===================================================================== */
+
+class FoodDataScrapeProvider extends FoodProvider{
+  constructor(key){
+    super(key);
+    // TODO: Pfad zum eigenen Backend-Proxy, sobald vorhanden, z.B. '/api/food'
+    this.backendBaseUrl = null;
+  }
+
+  async searchRestaurants(userPos, query, filters){
+    if(!this.backendBaseUrl){
+      throw new Error(`${this.key}: Food Data Scrape ist noch nicht angebunden (fehlende Endpunkt-Dokumentation/Credentials, siehe Kommentar oberhalb).`);
+    }
+    // TODO, sobald Doku vorhanden:
+    // const res = await fetch(`${this.backendBaseUrl}/search?provider=${this.key}&lat=${userPos.lat}&lon=${userPos.lon}&q=${encodeURIComponent(query||'')}`);
+    // const json = await res.json();
+    // return json.restaurants.map(r => this._mapRestaurant(r));
+    throw new Error('nicht implementiert');
+  }
+
+  async getRestaurant(providerRestaurantId, userPos){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    throw new Error('nicht implementiert');
+  }
+
+  async getMenu(providerRestaurantId){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    // TODO: Menue erst bei Bedarf laden (Restaurant-Detailseite), siehe Punkt 8/16
+    throw new Error('nicht implementiert');
+  }
+
+  async getOffers(providerRestaurantId){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    throw new Error('nicht implementiert');
+  }
+
+  /** Platzhalter-Mapping auf das interne Schema - Feldnamen links sind
+   *  TODO und muessen an die echte Response angepasst werden. */
+  _mapRestaurant(raw){
+    return {
+      id: `${this.key}_${raw.id /* TODO: echtes ID-Feld */}`,
+      provider: this.key,
+      providerRestaurantId: raw.id /* TODO */,
+      name: raw.name /* TODO */,
+      image: raw.image_url ?? null /* TODO */,
+      cuisineTypes: raw.cuisines ?? [] /* TODO */,
+      rating: raw.rating ?? null /* TODO */,
+      distance: raw.distance_m ?? null /* TODO */,
+      deliveryTime: raw.eta /* TODO */,
+      deliveryFee: raw.delivery_fee /* TODO */,
+      minimumOrder: raw.minimum_order /* TODO */,
+      isOpen: raw.is_open /* TODO */,
+      offers: [],
+      menu: [],
+      deepLink: raw.deep_link ?? FOOD_PROVIDER_META[this.key].homepage /* TODO */
+    };
+  }
+}
+
+/* ---------- Food Service (UI -> FoodService -> FoodProvider) ----------
+   Die UI kennt nur diese Schicht, nie einen konkreten Provider-Typ.
+   USE_LIVE_FOOD_DATA schaltet zentral zwischen Mock- und Live-Adapter um -
+   sobald FoodDataScrapeProvider echt angebunden ist, hier auf true
+   stellen (oder besser: automatisch anhand vorhandener backendBaseUrl). */
+const USE_LIVE_FOOD_DATA = false; // TODO: auf true stellen, sobald echte Anbindung steht
+
+function buildFoodProviders(){
+  if(USE_LIVE_FOOD_DATA){
+    return {
+      wolt: new FoodDataScrapeProvider('wolt'),
+      ubereats: new FoodDataScrapeProvider('ubereats'),
+      lieferando: new FoodDataScrapeProvider('lieferando')
+    };
+  }
+  return {
+    wolt: new MockFoodProvider('wolt', WOLT_SEED),
+    ubereats: new MockFoodProvider('ubereats', UBEREATS_SEED),
+    lieferando: new MockFoodProvider('lieferando', LIEFERANDO_SEED)
+  };
+}
+
+/* ---------- Demo-Datensaetze je Anbieter ----------
+   Bewusst so gewaehlt, dass "Burger House" bei allen drei Anbietern mit
+   demselben Standort-Versatz auftaucht (zeigt das Matching), waehrend
+   die anderen Restaurants je Anbieter exklusiv bleiben (zeigt, dass NICHT
+   faelschlich zusammengefuehrt wird). */
+const WOLT_SEED = [
+  { providerRestaurantId:'w1', name:'Burger House', cuisineTypes:['Burger','American'], rating:4.6, deliveryTime:'20-30 min', deliveryFee:1.99, minimumOrder:10, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[{ title:'20% Rabatt', description:'Auf die erste Bestellung', discount:'20%', conditions:'Ab 15 € Bestellwert, neue Kunden' }],
+    menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:9.90, available:true },
+      { providerItemId:'i2', name:'Veggie Burger', description:'Pflanzliche Pattie, vegan möglich', price:8.90, available:true },
+      { providerItemId:'i3', name:'Pommes', description:null, price:3.50, available:true }
+    ]},
+  { providerRestaurantId:'w2', name:'Sushi Ken', cuisineTypes:['Sushi','Asiatisch'], rating:4.8, deliveryTime:'30-40 min', deliveryFee:2.49, minimumOrder:15, isOpen:true, pickupAvailable:false, offset:{dx:-400,dy:300}, address:'Hauptstraße 22',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'California Roll (8 Stk.)', description:null, price:7.90, available:true },
+      { providerItemId:'i2', name:'Lachs Nigiri (4 Stk.)', description:null, price:6.50, available:true }
+    ]},
+  { providerRestaurantId:'w3', name:'Pizzeria Napoli', cuisineTypes:['Pizza','Italienisch'], rating:4.3, deliveryTime:'25-35 min', deliveryFee:0, minimumOrder:12, isOpen:false, pickupAvailable:true, offset:{dx:600,dy:-200}, address:'Marktplatz 5',
+    offers:[{ title:'Kostenlose Lieferung', description:'Dauerhaft, keine Mindestbestellung für die Liefergebühr', discount:null, conditions:'Mindestbestellwert 12 € gilt weiterhin' }],
+    menu:[{ providerItemId:'i1', name:'Pizza Margherita', description:'Tomate, Mozzarella, Basilikum', price:8.50, available:true }]}
+];
+
+const UBEREATS_SEED = [
+  { providerRestaurantId:'u1', name:'Burger House Tübingen', cuisineTypes:['Burger'], rating:4.5, deliveryTime:'25-35 min', deliveryFee:0.99, minimumOrder:9, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[{ title:'2 für 1', description:'Auf alle Cheeseburger, montags bis mittwochs', discount:null, conditions:'Nur Abholung, nicht mit anderen Aktionen kombinierbar' }],
+    menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:8.90, originalPrice:10.90, available:true },
+      { providerItemId:'i2', name:'Chicken Burger', description:'Knuspriges Hähnchen, Coleslaw', price:9.50, available:true }
+    ]},
+  { providerRestaurantId:'u2', name:'Döner Palace', cuisineTypes:['Döner','Türkisch'], rating:4.4, deliveryTime:'15-25 min', deliveryFee:1.49, minimumOrder:8, isOpen:true, pickupAvailable:true, offset:{dx:-150,dy:-350}, address:'Bahnhofstraße 9',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'Döner Kebab', description:null, price:6.50, available:true },
+      { providerItemId:'i2', name:'Dürüm', description:null, price:7.00, available:true }
+    ]},
+  { providerRestaurantId:'u3', name:'Curry Time', cuisineTypes:['Asiatisch','Vegetarisch'], rating:4.7, deliveryTime:'30-40 min', deliveryFee:1.99, minimumOrder:12, isOpen:true, pickupAvailable:false, offset:{dx:500,dy:450}, address:'Gartenweg 3',
+    offers:[{ title:'10 € Rabatt ab 25 €', description:null, discount:'10€', conditions:'Einmalig pro Konto, gültig bis Monatsende' }],
+    menu:[{ providerItemId:'i1', name:'Gemüse-Curry mit Reis', description:'Vegan', price:11.90, available:true }]}
+];
+
+const LIEFERANDO_SEED = [
+  { providerRestaurantId:'l1', name:'Burger House', cuisineTypes:['Burger','American'], rating:4.5, deliveryTime:'30-40 min', deliveryFee:1.50, minimumOrder:11, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:10.50, available:true },
+      { providerItemId:'i2', name:'Bacon Burger', description:null, price:11.20, available:true }
+    ]},
+  { providerRestaurantId:'l2', name:'Pizzeria Napoli', cuisineTypes:['Pizza','Italienisch'], rating:4.2, deliveryTime:'25-35 min', deliveryFee:1.00, minimumOrder:10, isOpen:true, pickupAvailable:true, offset:{dx:600,dy:-200}, address:'Marktplatz 5',
+    offers:[{ title:'15% Rabatt', description:'Für Neukunden über die Lieferando-App', discount:'15%', conditions:'Ab 20 € Bestellwert' }],
+    menu:[
+      { providerItemId:'i1', name:'Pizza Margherita', description:'Tomate, Mozzarella, Basilikum', price:8.90, available:true },
+      { providerItemId:'i2', name:'Pizza Salami', description:null, price:9.90, available:true }
+    ]},
+  { providerRestaurantId:'l3', name:'Grüner Salat Bar', cuisineTypes:['Vegetarisch','Vegan'], rating:4.6, deliveryTime:'20-30 min', deliveryFee:2.00, minimumOrder:9, isOpen:true, pickupAvailable:true, offset:{dx:-600,dy:100}, address:'Uhlandstraße 14',
+    offers:[], menu:[{ providerItemId:'i1', name:'Quinoa-Bowl', description:'Vegan', price:9.90, available:true }]}
+];
+
+const FOOD_PROVIDERS = buildFoodProviders();
+
+const FOOD_CATEGORIES = ['Pizza','Burger','Sushi','Döner','Asiatisch','Vegetarisch','Vegan','Frühstück','Desserts'];
+
+/* ---------- Restaurant-Matching (konservativ) ----------
+   Zwei Restaurants unterschiedlicher Anbieter gelten nur dann als
+   dasselbe, wenn sowohl der normalisierte Name als auch die Koordinaten
+   (< 120 m Abstand) uebereinstimmen. Lieber kein Match als ein falsches
+   Match - siehe Vorgabe. */
+function normalizeRestaurantName(name){
+  return name
+    .toLowerCase()
+    .replace(/\b(tübingen|stuttgart|berlin|münchen|hamburg|köln)\b/g, '')
+    .replace(/[|\-–,].*$/, '')
+    .replace(/[^a-z0-9äöüß ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+const MATCH_RADIUS_M = 120;
+
+function matchRestaurants(rawByProvider){
+  // rawByProvider: [{ provider, restaurants: Restaurant[] }]
+  const groups = [];
+  rawByProvider.forEach(({ restaurants }) => {
+    restaurants.forEach(r=>{
+      const norm = normalizeRestaurantName(r.name);
+      let group = groups.find(g =>
+        g.norm === norm &&
+        g.lat != null && r.lat != null &&
+        haversineMeters(g.lat, g.lon, r.lat, r.lon) <= MATCH_RADIUS_M
+      );
+      if(!group){
+        group = { id:`grp_${groups.length}_${norm.replace(/\s+/g,'_')}`, norm, name:r.name, entries:[], lat:r.lat, lon:r.lon };
+        groups.push(group);
+      }
+      group.entries.push(r);
+    });
+  });
+  return groups.map(g=>{
+    const ratings = g.entries.map(e=>e.rating).filter(r=>r!=null);
+    const distances = g.entries.map(e=>e.distance).filter(d=>d!=null);
+    const bestOffer = g.entries.flatMap(e=>e.offers).sort((a,b)=> (a.discount?0:1)-(b.discount?0:1))[0] || null;
+    return {
+      id: g.id,
+      name: g.name,
+      image: g.entries.find(e=>e.image)?.image || null,
+      cuisineTypes: [...new Set(g.entries.flatMap(e=>e.cuisineTypes))],
+      rating: ratings.length ? ratings.reduce((a,b)=>a+b,0)/ratings.length : null,
+      distance: distances.length ? Math.min(...distances) : null,
+      isOpenAnywhere: g.entries.some(e=>e.isOpen),
+      cheapestDeliveryFee: Math.min(...g.entries.map(e=>e.deliveryFee ?? Infinity)),
+      fastestDeliveryTime: g.entries.map(e=>e.deliveryTime).sort()[0],
+      bestOffer,
+      entries: g.entries // je ein Eintrag pro Anbieter, mit providerRestaurantId etc. erhalten
+    };
+  });
+}
+
+/* ---------- Suche / Aggregation ---------- */
+let foodProviderStatus = {}; // key -> { ok, error }
+let foodResultsRaw = [];     // gematchte Gruppen (letzter Suchlauf)
+let foodLastUpdated = null;
+
+async function runFoodSearch(query){
+  const entries = Object.entries(FOOD_PROVIDERS);
+  const settled = await Promise.allSettled(
+    entries.map(async ([key, provider]) => ({ key, restaurants: await provider.searchRestaurants(userPos, query) }))
+  );
+  foodProviderStatus = {};
+  const rawByProvider = [];
+  settled.forEach((res, i)=>{
+    const key = entries[i][0];
+    if(res.status === 'fulfilled'){
+      foodProviderStatus[key] = { ok:true };
+      rawByProvider.push({ provider:key, restaurants: res.value.restaurants });
+    }else{
+      foodProviderStatus[key] = { ok:false, error: String(res.reason?.message || res.reason) };
+    }
+  });
+  foodResultsRaw = matchRestaurants(rawByProvider);
+  foodLastUpdated = Date.now();
+}
+
+/* ---------- Filter / Sortierung (Grundgeruest, wie gefordert vorbereitet) ---------- */
+let foodQuery = '';
+let foodCategory = null;
+let foodSort = 'recommended'; // recommended | fastest | cheapest | rating | distance | offers
+let foodFilters = { onlyOpen:false, onlyOffers:false };
+
+function applyFoodFiltersAndSort(groups){
+  let list = groups.filter(g=>{
+    if(foodCategory && !g.cuisineTypes.some(c => c.toLowerCase() === foodCategory.toLowerCase())) return false;
+    if(foodFilters.onlyOpen && !g.isOpenAnywhere) return false;
+    if(foodFilters.onlyOffers && !g.bestOffer) return false;
+    return true;
+  });
+  const sorters = {
+    recommended: (a,b)=> (b.rating||0) - (a.rating||0),
+    fastest: (a,b)=> parseInt(a.fastestDeliveryTime) - parseInt(b.fastestDeliveryTime),
+    cheapest: (a,b)=> (a.cheapestDeliveryFee||0) - (b.cheapestDeliveryFee||0),
+    rating: (a,b)=> (b.rating||0) - (a.rating||0),
+    distance: (a,b)=> (a.distance ?? Infinity) - (b.distance ?? Infinity),
+    offers: (a,b)=> (b.bestOffer?1:0) - (a.bestOffer?1:0)
+  };
+  return list.sort(sorters[foodSort] || sorters.recommended);
+}
+
+/* ---------- UI ---------- */
+let foodView = 'home'; // 'home' | 'detail'
+let foodSelectedGroupId = null;
+
+function goFood(view, groupId){
+  foodView = view;
+  foodSelectedGroupId = groupId || null;
+  renderFoodScreen();
+}
+
+async function ensureFoodLoaded(){
+  if(!userPos){
+    foodContent.innerHTML = '<div class="empty loading-pulse">Ermittle deinen Standort …</div>';
+    await new Promise(resolve=>{
+      if(!navigator.geolocation){ resolve(); return; }
+      navigator.geolocation.getCurrentPosition(pos=>{
+        userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        resolve();
+      }, ()=> resolve(), { enableHighAccuracy:true, timeout:8000 });
+    });
+  }
+  foodContent.innerHTML = '<div class="empty loading-pulse">Lade Restaurants …</div>';
+  await runFoodSearch(foodQuery);
+}
+
+function renderFoodScreen(){
+  foodBack.style.display = foodView === 'home' ? 'none' : 'flex';
+  foodTitle.textContent = foodView === 'home' ? 'Essen' : (foodResultsRaw.find(g=>g.id===foodSelectedGroupId)?.name || 'Restaurant');
+  foodSub.style.display = foodView === 'home' ? 'block' : 'none';
+  if(foodView === 'home') renderFoodHome();
+  else renderFoodDetail();
+}
+
+function updatedAgoLabel(){
+  if(!foodLastUpdated) return '';
+  const s = Math.max(0, Math.round((Date.now() - foodLastUpdated)/1000));
+  return s < 5 ? 'Gerade eben aktualisiert' : `Zuletzt aktualisiert: vor ${s}s`;
+}
+
+function providerStatusRowHtml(){
+  return Object.entries(FOOD_PROVIDER_META).map(([key,p])=>{
+    const st = foodProviderStatus[key];
+    const ok = st ? st.ok : true;
+    return `<div class="provider-status-chip">${logoHtml(key, p.color)}<span>${p.name}</span> ${ok ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--err)">⚠️</span>'}</div>`;
+  }).join('');
+}
+
+function renderFoodHome(){
+  const list = applyFoodFiltersAndSort(foodResultsRaw);
+
+  foodContent.innerHTML = `
+    <div class="disclaimer-box">${USE_LIVE_FOOD_DATA
+      ? '<b>Live-Daten</b> von den jeweiligen Anbietern.'
+      : '<b>Demo-Daten:</b> Für Wolt, Uber Eats und Lieferando ist aktuell keine angebundene Live-Datenquelle konfiguriert (siehe Hinweis im Code: FoodDataScrapeProvider/USE_LIVE_FOOD_DATA). Diese Ansicht zeigt daher Beispiel-Restaurants, um den Anbietervergleich zu demonstrieren – keine echten Angebote. „Bestellen"-Buttons öffnen die jeweilige offizielle Anbieter-Startseite.'}</div>
+
+    <div class="food-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input type="text" id="foodSearchInput" placeholder="Restaurant oder Gericht suchen" value="${escapeHtml(foodQuery)}">
+    </div>
+
+    <div class="food-lead">Was möchtest du essen?</div>
+    <div class="cat-scroll" id="foodCats">
+      ${FOOD_CATEGORIES.map(c=>`<div class="cat-chip ${foodCategory===c?'on':''}" data-cat="${c}">${c}</div>`).join('')}
+    </div>
+
+    <div class="provider-status-row">${providerStatusRowHtml()}</div>
+
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin:4px 2px 8px;">
+      <div class="food-lead" style="margin:0;">Restaurants in deiner Nähe</div>
+      <span style="font-size:10.5px; color:var(--ink-soft);">${updatedAgoLabel()}</span>
+    </div>
+    <div id="foodResultsList"></div>
+  `;
+
+  const input = foodContent.querySelector('#foodSearchInput');
+  let searchTimer = null;
+  input.addEventListener('input', ()=>{
+    foodQuery = input.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async ()=>{ await runFoodSearch(foodQuery); renderFoodHome(); }, 350);
+  });
+
+  foodContent.querySelectorAll('.cat-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      foodCategory = foodCategory === chip.dataset.cat ? null : chip.dataset.cat;
+      renderFoodHome();
+    });
+  });
+
+  const resultsList = foodContent.querySelector('#foodResultsList');
+  if(!list.length){
+    resultsList.innerHTML = '<div class="empty">Keine Restaurants gefunden.</div>';
+  }else{
+    list.forEach(g=>{
+      const providerNames = g.entries.map(e => FOOD_PROVIDER_META[e.provider].name).join(' · ');
+      const card = document.createElement('div');
+      card.className = 'rest-card';
+      card.innerHTML = `
+        <div class="rest-thumb">${g.image ? `<img src="${g.image}" alt="" loading="lazy">` : '🍽️'}</div>
+        <div class="rest-info">
+          <div class="rest-name">${escapeHtml(g.name)}</div>
+          <div class="rest-meta">${escapeHtml(g.cuisineTypes.join(', '))}${g.rating ? ' · ⭐ ' + g.rating.toFixed(1) : ''}</div>
+          <div class="rest-meta2">${g.fastestDeliveryTime} · ab ${g.cheapestDeliveryFee.toFixed(2)} €${g.distance!=null ? ' · ' + metersLabel(g.distance) : ''}</div>
+          <div class="rest-providers">${g.entries.length>1 ? `<span class="rest-tag" style="background:var(--surface-2); color:var(--ink);">${g.entries.length} Anbieter</span>` : ''}${g.entries.map(e=>`<span class="rest-tag" style="background:${FOOD_PROVIDER_META[e.provider].color}">${FOOD_PROVIDER_META[e.provider].name}</span>`).join('')}</div>
+          ${g.bestOffer ? `<div class="offer-badge">${escapeHtml(g.bestOffer.title)}</div>` : ''}
+        </div>
+      `;
+      card.addEventListener('click', ()=> goFood('detail', g.id));
+      resultsList.appendChild(card);
+    });
+  }
+}
+
+function renderFoodDetail(){
+  const g = foodResultsRaw.find(x => x.id === foodSelectedGroupId);
+  if(!g){ goFood('home'); return; }
+
+  const compareHtml = g.entries.map(e=>{
+    const p = FOOD_PROVIDER_META[e.provider];
+    return `
+      <div class="compare-row">
+        <div class="compare-top">${logoHtml(e.provider, p.color)}<div class="compare-name">${p.name}</div>${!e.isOpen ? '<span style="font-size:11px; color:var(--err); font-weight:600;">Geschlossen</span>' : ''}</div>
+        <div class="compare-stats">
+          <div><b>${e.deliveryTime}</b> Lieferzeit</div>
+          <div><b>${e.deliveryFee.toFixed(2)} €</b> Liefergebühr</div>
+          <div><b>${e.minimumOrder.toFixed(0)} €</b> Mindestbestellwert</div>
+        </div>
+        ${e.pickupAvailable ? '<div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">Abholung möglich</div>' : ''}
+        ${e.offers.length ? e.offers.map(o=>`<div class="offer-badge" style="display:block; margin-bottom:8px;">${escapeHtml(o.title)}${o.conditions ? ' – ' + escapeHtml(o.conditions) : ''}</div>`).join('') : ''}
+        <a class="detail-btn" href="${e.deepLink}" target="_blank" rel="noopener" style="display:block;">Bei ${p.name} bestellen</a>
+      </div>
+    `;
+  }).join('');
+
+  const cheapestEntry = g.entries.reduce((a,b)=> ((a.deliveryFee ?? Infinity) <= (b.deliveryFee ?? Infinity) ? a : b));
+  const menuHtml = cheapestEntry.menu.map(m=>`
+    <div class="menu-item-row">
+      <div class="menu-item-top">
+        <div>
+          <div class="menu-item-name">${escapeHtml(m.name)}</div>
+          ${m.description ? `<div class="menu-item-desc">${escapeHtml(m.description)}</div>` : ''}
+        </div>
+        <div class="menu-item-price">${m.originalPrice ? `<span class="orig">${m.originalPrice.toFixed(2)} €</span>` : ''}${m.price.toFixed(2)} €</div>
+      </div>
+    </div>
+  `).join('');
+
+  foodContent.innerHTML = `
+    <div class="section-label">Anbieter vergleichen</div>
+    ${compareHtml}
+    <div class="section-label">Speisekarte (${FOOD_PROVIDER_META[cheapestEntry.provider].name})</div>
+    <div class="disclaimer-box" style="margin-bottom:10px;">Preis vor Checkout – zusätzliche Gebühren (z. B. Service) können erst im Bestellprozess des jeweiligen Anbieters sichtbar werden und sind hier nicht enthalten.</div>
+    ${menuHtml}
+  `;
+}
+
+foodBack.addEventListener('click', ()=> goFood('home'));
+
+
+const PROFILE_KEY = 'rollr_profile_v1';
+const SETTINGS_KEY = 'rollr_settings_v1';
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function loadProfile(){
+  try{
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(err){}
+  const fresh = {
+    firstName:'', lastName:'', email:'', phone:'',
+    username: 'user_' + Math.random().toString(36).slice(2, 8),
+    createdAt: Date.now()
+  };
+  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(fresh)); }catch(err){}
+  return fresh;
+}
+function saveProfile(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(err){} }
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(err){}
+  return { notifications:true, theme:'system' };
+}
+function saveSettings(s){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch(err){} }
+
+function effectiveTheme(theme){
+  if(theme !== 'system') return theme;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+function applyTheme(theme){
+  document.querySelector('.phone').classList.toggle('theme-light', effectiveTheme(theme) === 'light');
+}
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', ()=>{
+    if(loadSettings().theme === 'system') applyTheme('system');
+  });
+}
+applyTheme(loadSettings().theme);
+
+async function locationPermissionState(){
+  if(!navigator.permissions?.query) return 'unknown';
+  try{ return (await navigator.permissions.query({ name:'geolocation' })).state; }
+  catch(err){ return 'unknown'; }
+}
+function permissionLabel(state){
+  return { granted:['Erteilt','var(--ok)'], denied:['Blockiert','var(--err)'], prompt:['Noch nicht entschieden','var(--ink-soft)'], unknown:['Unbekannt','var(--ink-soft)'] }[state] || ['Unbekannt','var(--ink-soft)'];
+}
+
+let profileView = 'menu'; // 'menu' | 'account' | 'settings' | 'edit'
+let editingField = null;
+
+function goProfile(view, field){
+  profileView = view;
+  editingField = field || null;
+  renderProfileScreen();
+}
+
+function chevronRowHtml(title, sub){
+  return `
+    <div class="rowinfo">
+      <div class="name">${title}</div>
+      ${sub ? `<div class="meta">${sub}</div>` : ''}
+    </div>
+    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+  `;
+}
+
+function renderProfileScreen(){
+  profileBack.style.display = profileView === 'menu' ? 'none' : 'flex';
+  const titles = { menu:'Profil', account:'Konto', settings:'Einstellungen', edit:'Bearbeiten' };
+  const subs = {
+    menu:'Dein lokales Profil auf diesem Gerät.',
+    account:'Persönliche Daten und Account-Informationen.',
+    settings:'Allgemein, Darstellung, Datenschutz und mehr.',
+    edit:''
+  };
+  profileTitle.textContent = titles[profileView];
+  profileSub.textContent = subs[profileView];
+  profileSub.style.display = subs[profileView] ? 'block' : 'none';
+
+  if(profileView === 'menu') renderProfileMenu();
+  else if(profileView === 'account') renderAccountPage();
+  else if(profileView === 'settings') renderSettingsPage();
+  else if(profileView === 'edit') renderEditPage();
+}
+
+function renderProfileMenu(){
+  const profile = loadProfile();
+  const initials = ((profile.firstName[0] || '') + (profile.lastName[0] || '')).toUpperCase() || 'G';
+  const displayName = (profile.firstName || profile.lastName) ? `${profile.firstName} ${profile.lastName}`.trim() : 'Profil einrichten';
+  const sub = profile.email || 'Keine E-Mail hinterlegt';
+
+  profileContent.innerHTML = `
+    <div class="profile-card">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <div class="profile-card-name">${escapeHtml(displayName)}</div>
+        <div class="profile-card-sub">${escapeHtml(sub)}</div>
+      </div>
+    </div>
+    <div class="row" id="goAccount" style="cursor:pointer;">${chevronRowHtml('Konto', 'Persönliche Daten, E-Mail, Account-Status')}</div>
+    <div class="row" id="goSettings" style="cursor:pointer;">${chevronRowHtml('Einstellungen', 'Darstellung, Standort, Datenschutz')}</div>
+  `;
+  profileContent.querySelector('#goAccount').addEventListener('click', ()=> goProfile('account'));
+  profileContent.querySelector('#goSettings').addEventListener('click', ()=> goProfile('settings'));
+}
+
+function renderAccountPage(){
+  const profile = loadProfile();
+  const createdLabel = new Date(profile.createdAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const fields = [
+    ['firstName','Vorname'], ['lastName','Nachname'], ['email','E-Mail-Adresse'], ['phone','Telefonnummer']
+  ];
+
+  profileContent.innerHTML = `
+    <div class="section-label">Persönliche Daten</div>
+    ${fields.map(([key,label])=>`
+      <div class="row edit-row" data-field="${key}" style="cursor:pointer;">
+        ${chevronRowHtml(label, profile[key] ? escapeHtml(profile[key]) : 'Nicht angegeben')}
+      </div>
+    `).join('')}
+
+    <div class="section-label">Account</div>
+    <div class="info-row">
+      <div class="info-label">Benutzername / Account-ID</div>
+      <div class="info-value">${escapeHtml(profile.username)}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Account-Status</div>
+      <div class="info-value"><span class="status-dot" style="background:var(--ok)"></span>Lokal gespeichert – kein Login bei einem Scooter-Anbieter verknüpft</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Registrierungsinformationen</div>
+      <div class="info-value">Auf diesem Gerät angelegt am ${createdLabel}</div>
+    </div>
+  `;
+  profileContent.querySelectorAll('.edit-row').forEach(row=>{
+    row.addEventListener('click', ()=> goProfile('edit', row.dataset.field));
+  });
+}
+
+const FIELD_META = {
+  firstName:{ label:'Vorname', type:'text' },
+  lastName:{ label:'Nachname', type:'text' },
+  email:{ label:'E-Mail-Adresse', type:'email' },
+  phone:{ label:'Telefonnummer', type:'tel' }
+};
+
+function renderEditPage(){
+  const profile = loadProfile();
+  const meta = FIELD_META[editingField];
+  if(!meta){ goProfile('account'); return; }
+  profileTitle.textContent = meta.label;
+
+  profileContent.innerHTML = `
+    <div class="field-label">${meta.label}</div>
+    <input class="field-input" id="editInput" type="${meta.type}" value="${escapeHtml(profile[editingField] || '')}" placeholder="${meta.label} eingeben" autocomplete="off">
+    <div style="height:16px;"></div>
+    <div class="detail-btn" id="editSave">Speichern</div>
+  `;
+  const input = profileContent.querySelector('#editInput');
+  input.focus();
+  profileContent.querySelector('#editSave').addEventListener('click', ()=>{
+    profile[editingField] = input.value.trim();
+    saveProfile(profile);
+    goProfile('account');
+  });
+}
+
+function renderSettingsPage(){
+  const settings = loadSettings();
+
+  profileContent.innerHTML = `
+    <div class="section-label">Allgemein</div>
+    <div class="info-row">
+      <div class="info-label">Sprache</div>
+      <div class="info-value">Deutsch (aktuell einzige verfügbare Sprache)</div>
+    </div>
+    <div class="row" style="cursor:default;">
+      <div class="rowinfo">
+        <div class="name">Benachrichtigungen</div>
+        <div class="meta">Nur eine gespeicherte Einstellung – diese App versendet aktuell keine echten Push-Benachrichtigungen</div>
+      </div>
+      <div class="toggle ${settings.notifications ? 'on' : ''}" id="notifToggle"><div class="knob"></div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Standortberechtigung</div>
+      <div class="info-value" id="permInfo">Wird geprüft …</div>
+      <div class="goto" id="permRetry" style="display:inline-block; margin-top:8px; cursor:pointer;">Standort erneut anfragen</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">App-Einstellungen</div>
+      <div class="info-value">Weitere Einstellungen folgen in einer späteren Version.</div>
+    </div>
+
+    <div class="section-label">Darstellung</div>
+    <div class="segmented" id="themeSeg">
+      <div class="segmented-opt" data-v="light">Hell</div>
+      <div class="segmented-opt" data-v="dark">Dunkel</div>
+      <div class="segmented-opt" data-v="system">System</div>
+    </div>
+
+    <div class="section-label">Datenschutz</div>
+    <div class="info-row">
+      <div class="info-label">Standortfreigabe</div>
+      <div class="info-value">Dein Standort wird ausschließlich lokal in deinem Browser verwendet, um Entfernungen zu berechnen – er wird an keinen eigenen Server übertragen (diese App hat kein eigenes Backend).</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Datenschutzeinstellungen</div>
+      <div class="info-value">Es gibt kein Nutzerkonto und kein Tracking. Profildaten liegen ausschließlich lokal (localStorage) auf diesem Gerät.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Datenverwaltung</div>
+      <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <div class="goto" id="wipeProfile" style="cursor:pointer;">Profildaten löschen</div>
+      </div>
+    </div>
+
+    <div class="section-label">App</div>
+    <div class="info-row">
+      <div class="info-label">Über die App</div>
+      <div class="info-value">Combine zeigt Scooter und Restaurants mehrerer Anbieter auf einer Karte/Liste und verlinkt zum Entsperren bzw. Bestellen direkt in die jeweils offizielle Anbieter-App.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Version</div>
+      <div class="info-value">1.0.0</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Hilfe</div>
+      <div class="info-value">Fragen zu einer konkreten Fahrt, Bestellung oder Abrechnung klärt bitte direkt die jeweilige Anbieter-App – dort läuft der eigentliche Vorgang.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Support</div>
+      <div class="info-value">Für Probleme mit einem Scooter oder einer Bestellung wende dich an den Support des jeweiligen Anbieters in dessen App.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Rechtliche Informationen</div>
+      <div class="info-value">Inoffizieller Prototyp, keine Verbindung zu Dott, Bolt, Voi, Lime, Zeus, Yoio, Hopp, Wolt, Uber Eats oder Lieferando. Scooter-Standortdaten via MobiData BW (CC BY 4.0). Die Restaurant-Daten im Essen-Bereich sind aktuell Demo-Daten (siehe Hinweis dort) – keine echten Live-Daten.</div>
+    </div>
+  `;
+
+  profileContent.querySelector('#notifToggle').addEventListener('click', ()=>{
+    settings.notifications = !settings.notifications;
+    saveSettings(settings);
+    renderSettingsPage();
+  });
+
+  const seg = profileContent.querySelector('#themeSeg');
+  seg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', opt.dataset.v === settings.theme);
+    opt.addEventListener('click', ()=>{
+      settings.theme = opt.dataset.v;
+      saveSettings(settings);
+      applyTheme(settings.theme);
+      renderSettingsPage();
+    });
+  });
+
+  profileContent.querySelector('#permRetry').addEventListener('click', locateAndLoad);
+  locationPermissionState().then(state=>{
+    const [label, color] = permissionLabel(state);
+    const el = profileContent.querySelector('#permInfo');
+    if(el) el.innerHTML = `<span class="status-dot" style="background:${color}"></span>${label}`;
+  });
+
+  profileContent.querySelector('#wipeProfile').addEventListener('click', ()=>{
+    try{ localStorage.removeItem(PROFILE_KEY); }catch(err){}
+    goProfile('menu');
+  });
+}
+
+profileBack.addEventListener('click', ()=>{
+  goProfile(profileView === 'edit' ? 'account' : 'menu');
+});
+
+document.getElementById('locateBtn').addEventListener('click', locateAndLoad);
+locateAndLoad();
+
+/* ---------- Aufziehbares Bottom-Sheet (Karte <-> Liste) ---------- */
+const SHEET_HEIGHT = 460;   // Gesamthoehe des Sheets (siehe CSS .sheet)
+const SHEET_PEEK = 84;      // im eingeklapptem Zustand sichtbarer Bereich (Griff + Zusammenfassung)
+const SHEET_COLLAPSED_Y = SHEET_HEIGHT - SHEET_PEEK;
+
+let dragPointerId = null;
+let dragStartY = 0;
+let dragStartTranslate = 0;
+let dragLastTranslate = 0;
+let dragMoved = false;
+
+function currentSheetTranslate(){
+  return sheet.classList.contains('expanded') ? 0 : SHEET_COLLAPSED_Y;
+}
+
+function setSheetTranslate(px){
+  sheet.style.transform = `translateY(${px}px)`;
+  mapScreen.classList.toggle('sheet-expanded', px < SHEET_COLLAPSED_Y - 20);
+}
+
+function settleSheet(expand){
+  sheet.classList.toggle('expanded', expand);
+  sheet.style.transform = ''; // CSS-Klasse uebernimmt die Endposition mit Transition
+  mapScreen.classList.toggle('sheet-expanded', expand);
+}
+
+sheetHandle.addEventListener('pointerdown', (e)=>{
+  dragPointerId = e.pointerId;
+  dragStartY = e.clientY;
+  dragStartTranslate = currentSheetTranslate();
+  dragLastTranslate = dragStartTranslate;
+  dragMoved = false;
+  sheet.classList.add('dragging');
+  sheetHandle.setPointerCapture(e.pointerId);
+});
+
+sheetHandle.addEventListener('pointermove', (e)=>{
+  if(dragPointerId === null) return;
+  const dy = e.clientY - dragStartY;
+  if(Math.abs(dy) > 6) dragMoved = true;
+  const t = Math.max(0, Math.min(SHEET_COLLAPSED_Y, dragStartTranslate + dy));
+  dragLastTranslate = t;
+  setSheetTranslate(t);
+});
+
+function endDrag(){
+  if(dragPointerId === null) return;
+  dragPointerId = null;
+  sheet.classList.remove('dragging');
+  if(dragMoved){
+    settleSheet(dragLastTranslate < SHEET_COLLAPSED_Y / 2);
+  }else{
+    // reiner Tap auf den Griff -> Zustand umschalten
+    settleSheet(!sheet.classList.contains('expanded'));
+  }
+}
+
+sheetHandle.addEventListener('pointerup', endDrag);
+sheetHandle.addEventListener('pointercancel', endDrag);
+
+/* ---------- Anbieter-Auswahl (wird sowohl im "Anbieter"-Tab als auch im Filter-Panel genutzt) ---------- */
+function renderProviderToggles(container){
+  container.innerHTML = '';
+  Object.entries(PROVIDER_META).forEach(([key, p])=>{
+    const isOn = activeProviders.has(key);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      ${logoHtml(key, p.color)}
+      <div class="rowinfo">
+        <div class="name">${p.name}</div>
+        <div class="meta">${isOn ? 'wird auf der Karte angezeigt' : 'ausgeblendet'}</div>
+      </div>
+      <div class="toggle ${isOn ? 'on' : ''}" data-key="${key}"><div class="knob"></div></div>
+    `;
+    const toggleEl = row.querySelector('.toggle');
+    toggleEl.addEventListener('click', ()=>{
+      if(activeProviders.has(key)) activeProviders.delete(key);
+      else activeProviders.add(key);
+      renderProviderToggles(providerList);
+      renderProviderToggles(filterProviderList);
+      renderVehicles(lastNearbyVehicles);
+    });
+    container.appendChild(row);
+  });
+}
+renderProviderToggles(providerList);
+renderProviderToggles(filterProviderList);
+
+/* ---------- Filter-Panel: Radius und Preis ---------- */
+function updateRadiusLabel(){ radiusValue.textContent = `${radiusSlider.value} km`; }
+function updatePriceLabel(){ priceValue.textContent = `${Number(priceSlider.value).toFixed(2)} €`; }
+
+radiusSlider.value = maxRadiusM / 1000;
+updateRadiusLabel();
+priceSlider.value = '1.00';
+updatePriceLabel();
+
+radiusSlider.addEventListener('input', ()=>{
+  maxRadiusM = Number(radiusSlider.value) * 1000;
+  updateRadiusLabel();
+  renderVehicles(lastNearbyVehicles);
+});
+
+priceFilterToggle.addEventListener('change', ()=>{
+  priceSlider.disabled = !priceFilterToggle.checked;
+  maxPricePerMin = priceFilterToggle.checked ? Number(priceSlider.value) : null;
+  renderVehicles(lastNearbyVehicles);
+});
+
+priceSlider.addEventListener('input', ()=>{
+  updatePriceLabel();
+  if(priceFilterToggle.checked){
+    maxPricePerMin = Number(priceSlider.value);
+    renderVehicles(lastNearbyVehicles);
+  }
+});
+
+function openFilter(){ filterOverlay.classList.add('show'); }
+function closeFilter(){ filterOverlay.classList.remove('show'); }
+filterBtn.addEventListener('click', openFilter);
+document.getElementById('filterClose').addEventListener('click', closeFilter);
+document.getElementById('filterDone').addEventListener('click', closeFilter);
+filterOverlay.addEventListener('click', (e)=>{ if(e.target === filterOverlay) closeFilter(); });
+
+/* ---------- Umschaltung zwischen Karte, Essen, Anbieter und Profil ---------- */
+document.querySelectorAll('.navitem[data-tab]').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.navitem').forEach(i=>i.classList.remove('active'));
+    item.classList.add('active');
+    const tab = item.dataset.tab;
+
+    mapScreen.classList.toggle('hidden', tab !== 'map');
+    providersScreen.classList.toggle('show', tab === 'providers');
+    foodScreen.classList.toggle('show', tab === 'food');
+    profileScreen.classList.toggle('show', tab === 'profile');
+
+    if(tab === 'food'){ ensureFoodLoaded().then(()=> goFood('home')); }
+    if(tab === 'profile') goProfile('menu');
+  });
+});
+</script>
+</body>
+</html>
