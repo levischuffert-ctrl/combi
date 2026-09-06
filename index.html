@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg:#10161B; --surface:#1B232A; --surface-2:#232D35; --ink:#F1EFE6; --ink-soft:#8FA0A8;
@@ -184,14 +185,20 @@
   .filter-check span{ display:flex; gap:6px; align-items:baseline; }
   .filter-check span span{ color:var(--accent); font-weight:700; }
   .filter-note{ font-size:10.5px; color:var(--ink-soft); line-height:1.5; margin-top:6px; }
+  .nav-info-panel{ padding-top:4px; }
+  .nav-info-stats{ display:flex; gap:8px; margin-bottom:4px; }
+  .nav-info-stat{ flex:1; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:14px 10px; text-align:center; }
+  .nav-info-stat b{ display:block; font-family:var(--font-display); font-size:19px; font-weight:700; }
+  .nav-info-stat span{ font-size:11px; color:var(--ink-soft); }
 
   /* ---------- Routenplanung ---------- */
   #routeSuggestions .row{ padding:10px 4px; }
+  #citySearchResults .row{ padding:10px 4px; cursor:pointer; }
   .route-result{ margin-top:16px; }
   .route-price-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
 
   /* ---------- Profil / Konto / Einstellungen ---------- */
-  .profile-head{ display:flex; align-items:center; gap:10px; }
+  .profile-head{ display:flex; align-items:center; gap:10px; position:relative; }
   .section-label{ font-family:var(--font-display); font-size:11.5px; font-weight:700; letter-spacing:.02em; color:var(--ink-soft); margin:18px 4px 6px; text-transform:uppercase; }
   .section-label:first-child{ margin-top:2px; }
   .profile-card{ display:flex; align-items:center; gap:14px; padding:16px 4px 20px; border-bottom:1px solid var(--line-soft); margin-bottom:4px; }
@@ -212,6 +219,22 @@
 
   /* ---------- Essen / Food-Vergleich ---------- */
   .food-search{ display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:11px 14px; margin:2px 2px 14px; }
+
+  /* ---------- Einkauf: Markt-Chips, Angebots-Grid, Dropdown-Menü ---------- */
+  .market-chip{ flex:0 0 auto; display:flex; align-items:center; gap:7px; padding:6px 12px 6px 6px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:12px; font-weight:600; cursor:pointer; opacity:.55; transition:opacity .15s var(--ease-standard), border-color .15s var(--ease-standard); white-space:nowrap; }
+  .market-chip.on{ opacity:1; border-color:var(--accent); }
+  .market-chip .logo{ flex:0 0 auto; }
+  .deals-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .deal-card{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:10px; }
+  .deal-thumb{ width:100%; aspect-ratio:1; border-radius:10px; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:26px; overflow:hidden; margin-bottom:8px; }
+  .deal-thumb img{ width:100%; height:100%; object-fit:contain; }
+  .deal-name{ font-size:12px; font-weight:600; line-height:1.3; }
+  .deal-price{ font-family:var(--font-display); font-weight:700; font-size:14px; margin-top:4px; color:var(--accent); }
+  .deal-meta{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+  .dropdown-menu{ position:absolute; top:44px; right:16px; z-index:50; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 26px rgba(0,0,0,.4); overflow:hidden; min-width:200px; animation:screenIn .18s var(--ease-out); }
+  .dropdown-item{ padding:13px 16px; font-size:13px; font-weight:600; cursor:pointer; border-bottom:1px solid var(--line-soft); transition:background .15s var(--ease-standard); }
+  .dropdown-item:last-child{ border-bottom:none; }
+  .dropdown-item:hover{ background:var(--surface-2); }
   .food-search input{ border:none; outline:none; background:transparent; font-family:var(--font-body); font-size:14px; width:100%; color:var(--ink); }
   .food-search input::placeholder{ color:var(--ink-soft); }
   .food-lead{ font-family:var(--font-display); font-size:16px; font-weight:700; margin:4px 2px 10px; }
@@ -240,10 +263,15 @@
   .rest-tag{ font-size:10.5px; font-weight:700; padding:3px 7px; border-radius:6px; color:#fff; }
   .offer-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:6px; background:var(--ok); color:#08210F; margin-top:6px; }
 
-  .compare-row{ border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; margin-bottom:10px; }
+  .compare-row{ border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; margin-bottom:10px; transition:border-color .2s var(--ease-standard), background .2s var(--ease-standard); }
   .compare-top{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .compare-name{ font-family:var(--font-display); font-weight:700; font-size:14px; flex:1; }
   .compare-stats{ display:flex; gap:14px; font-size:12.5px; color:var(--ink-soft); margin-bottom:12px; }
+  .compare-select{ cursor:pointer; }
+  .compare-select:active{ transform:scale(.99); }
+  .compare-check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--accent-ink); flex:0 0 auto; transition:background .2s var(--ease-standard), border-color .2s var(--ease-standard); }
+  .compare-row.selected{ border-color:var(--accent); background:var(--surface-2); }
+  .compare-row.selected .compare-check{ background:var(--accent); border-color:var(--accent); }
   .compare-stats b{ color:var(--ink); font-weight:600; }
 
   .menu-item-row{ padding:10px 4px; border-bottom:1px solid var(--line-soft); }
@@ -295,6 +323,7 @@
           <div class="sheet-summary" id="sheetSummary">Scooter werden geladen…</div>
         </div>
         <div class="list" id="scooterList"><div class="empty">Lade Standorte …</div></div>
+        <div class="list nav-info-panel" id="navInfoPanel" style="display:none;"></div>
       </div>
     </div>
 
@@ -304,6 +333,35 @@
         <div class="providers-sub">Wähle aus, welche Scooter-Anbieter auf der Karte angezeigt werden.</div>
       </div>
       <div class="list" id="providerList"></div>
+    </div>
+
+    <div class="providersscreen" id="shoppingScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="shoppingBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="shoppingTitle">Einkauf</div>
+          <div class="providers-sub" id="shoppingSub">Preise mehrerer Quellen vergleichen.</div>
+        </div>
+        <!-- DEV-ONLY: Backend-Erreichbarkeits-Anzeige fuer die Entwicklung.
+             Vor dem Live-Gang entfernen (siehe DEV_SHOW_BACKEND_STATUS im Script). -->
+        <div class="detail-close" id="backendStatusBadge" title="Backend nicht erreichbar (DEV)" style="display:none; background:var(--err); color:#fff; font-weight:800; font-size:15px;">!</div>
+        <div class="detail-close" id="citySearchBtn" title="Stadt suchen">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        </div>
+        <div class="detail-close" id="shoppingMenuBtn" style="display:none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ink)"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </div>
+      </div>
+      <div id="citySearchPanel" style="display:none; padding:0 2px 12px;">
+        <div class="food-search" style="margin:8px 2px 0;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input type="text" id="citySearchInput" placeholder="Stadt suchen, z.B. Stuttgart">
+        </div>
+        <div id="citySearchResults"></div>
+      </div>
+      <div class="list" id="shoppingContent" style="padding:0 2px;"></div>
     </div>
 
     <div class="providersscreen" id="foodScreen">
@@ -335,7 +393,7 @@
     <div class="nav">
       <div class="navitem active" data-tab="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-2V4l6 2 6-2 6 2v14l-6-2-6 2z"/><path d="M9 6v14M15 4v14"/></svg><span>Karte</span></div>
       <div class="navitem" data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a2 2 0 002 2h0a2 2 0 002-2V3M8 12v9M17 3c-1.7 0-3 2.2-3 5s1.3 5 3 5v9"/></svg><span>Essen</span></div>
-      <div class="navitem" data-tab="providers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Anbieter</span></div>
+      <div class="navitem" data-tab="shopping"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6L4 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/></svg><span>Einkauf</span></div>
       <div class="navitem" data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span>Profil</span></div>
     </div>
 
@@ -491,6 +549,11 @@ const foodContent = document.getElementById('foodContent');
 const foodTitle = document.getElementById('foodTitle');
 const foodSub = document.getElementById('foodSub');
 const foodBack = document.getElementById('foodBack');
+const shoppingScreen = document.getElementById('shoppingScreen');
+const shoppingContent = document.getElementById('shoppingContent');
+const shoppingTitle = document.getElementById('shoppingTitle');
+const shoppingSub = document.getElementById('shoppingSub');
+const shoppingBack = document.getElementById('shoppingBack');
 const profileScreen = document.getElementById('profileScreen');
 const profileContent = document.getElementById('profileContent');
 const profileTitle = document.getElementById('profileTitle');
@@ -695,6 +758,929 @@ const detailBody = document.getElementById('detailBody');
 detailOverlay.addEventListener('click', (e)=>{ if(e.target === detailOverlay) closeDetail(); });
 
 /* =====================================================================
+   EINKAUFEN & SPAREN
+
+   Datenquellen-Hinweis (Recherche vor der Implementierung, wie gefordert):
+   - SnapMarkt-Server (github.com/LS19GamerMarius/snapmarkt-server): laut
+     eigenem README ein Puppeteer-Scraper gegen REWE/Lidl/Aldi/Penny-
+     Webseiten. Wird NICHT eingebunden - unautorisiertes Scraping fremder
+     Websites, unabhaengig von der Verpackung.
+   - rewe-price-data (github.com/L480/rewe-price-data): erzeugt einen
+     kompletten REWE-Produktkatalog, den es als offizielles offenes
+     Datenangebot bei REWE nicht gibt - ebenfalls nicht eingebunden.
+   - "Lidl Price Tracker" (github.com/luminati-io/...): luminati-io ist
+     der fruehere Firmenname von Bright Data, einem kommerziellen
+     Scraping-Anbieter - ebenfalls nicht eingebunden.
+   - Marktguru: keine oeffentliche API gefunden - Stub, nicht angebunden.
+   - Open Prices (prices.openfoodfacts.org): ECHTE, offen dokumentierte,
+     community-basierte API des gemeinnuetzigen Open-Food-Facts-Projekts.
+     Wird als einzige echte Live-Quelle genutzt. WICHTIG: das sind von
+     Nutzern gemeldete Preise mit Zeitstempel, keine Kassen-Live-Preise -
+     die UI zeigt deshalb immer "gemeldet vor X" statt "live".
+   - Produktsuche (Name -> Barcode) laeuft ueber die oeffentliche
+     Open-Food-Facts-Suche (world.openfoodfacts.org).
+
+   Provider-Architektur (wie gefordert, PriceProvider-Interface):
+   PriceProvider
+   ├── OpenPricesProvider      (echt, aktiv)
+   ├── SnapMarktProvider       (Stub, requires_review: Scraping)
+   ├── ReweProvider            (Stub, requires_review: keine offizielle API)
+   ├── LidlProvider            (Stub, requires_review: keine offizielle API)
+   └── MarktguruProvider       (Stub, requires_review: keine oeffentliche API gefunden)
+   ===================================================================== */
+
+class PriceProvider{
+  constructor(key, name){ this.key = key; this.name = name; this.status = 'unknown'; }
+  /** @returns {Promise<object[]>} Preis-Eintraege im internen Schema (siehe unten) */
+  async getPrices(productQuery){ throw new Error(`${this.key}: getPrices nicht implementiert`); }
+}
+
+/** Stub fuer Quellen ohne verifizierte, zulaessige oeffentliche API. Liefert
+ *  bewusst NIE Daten - nur einen Status, den die UI ehrlich anzeigen kann,
+ *  statt eine Quelle vorzutaeuschen, die es nicht gibt. */
+class StubPriceProvider extends PriceProvider{
+  constructor(key, name, reason){ super(key, name); this.status = 'unavailable'; this.reason = reason; }
+  async getPrices(){ return []; }
+}
+
+function timeAgoLabel(dateIso){
+  if(!dateIso) return null;
+  const diffMs = Date.now() - new Date(dateIso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if(mins < 1) return 'gerade eben gemeldet';
+  if(mins < 60) return `gemeldet vor ${mins} Min.`;
+  const hours = Math.round(mins/60);
+  if(hours < 24) return `gemeldet vor ${hours} Std.`;
+  const days = Math.round(hours/24);
+  return `gemeldet vor ${days} Tag${days===1?'':'en'}`;
+}
+
+class OpenPricesProvider extends PriceProvider{
+  constructor(){ super('openprices', 'Open Prices'); this.status = 'ok'; }
+
+  /** Sucht zunaechst ueber die oeffentliche Open-Food-Facts-Suche nach
+   *  einem passenden Produkt (liefert den Barcode), fragt dann Open Prices
+   *  nach kuerzlich gemeldeten Preisen fuer diesen Barcode ab. */
+  async getPrices(productName){
+    try{
+      const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(productName)}&search_simple=1&action=process&json=1&page_size=1&fields=code,product_name,brands,quantity,image_small_url`;
+      const searchRes = await fetch(searchUrl);
+      if(!searchRes.ok) throw new Error('HTTP ' + searchRes.status);
+      const searchJson = await searchRes.json();
+      const product = searchJson.products?.[0];
+      if(!product?.code){ this.status = 'ok'; return []; } // kein passendes Produkt gefunden - kein Fehler, nur kein Treffer
+
+      const pricesUrl = `https://prices.openfoodfacts.org/api/v1/prices?product_code=${encodeURIComponent(product.code)}`;
+      const pricesRes = await fetch(pricesUrl);
+      if(!pricesRes.ok) throw new Error('HTTP ' + pricesRes.status);
+      const pricesJson = await pricesRes.json();
+      // Response-Huelle defensiv behandeln (Feldname der Ergebnisliste war
+      // aus der Doku nicht zweifelsfrei zu bestimmen).
+      const items = pricesJson.items || pricesJson.results || [];
+
+      this.status = 'ok';
+      return items.slice(0, 10).map(p => ({
+        provider: this.key,
+        productName: product.product_name || productName,
+        productCode: product.code,
+        brand: product.brands || null,
+        quantity: product.quantity || null,
+        imageUrl: product.image_small_url || null,
+        price: p.price,
+        currency: p.currency || 'EUR',
+        originalPrice: p.price_without_discount ?? null,
+        discounted: !!p.price_is_discounted,
+        retailer: p.location?.osm_name || p.store?.name || 'unbekannter Markt',
+        reportedAt: p.created || p.date || p.price_date || null,
+        source: 'Open Prices (community-gemeldet)'
+      }));
+    }catch(err){
+      this.status = 'error';
+      return [];
+    }
+  }
+}
+
+/* =====================================================================
+   OFFERHOPPER.AI - ueber eigenen Backend-Proxy (siehe /combine-backend)
+
+   Der direkte Browser-Aufruf gegen mcp.offerhopper.ai ist wie erwartet an
+   CORS gescheitert (MCP ist fuer KI-Agenten gebaut, nicht fuer Web-Apps).
+   Der eigentliche MCP-Handshake (initialize -> tools/list -> tools/call)
+   laeuft jetzt serverseitig im mitgelieferten combine-backend-Projekt -
+   dort existiert CORS schlicht nicht, weil es eine Browser-Regel ist.
+   Der Browser ruft nur noch den eigenen, simplen Endpunkt auf.
+
+   WICHTIG: Passe BACKEND_BASE_URL an, sobald das Backend nicht mehr lokal
+   auf deinem Rechner, sondern auf einem echten Server laeuft. */
+
+const BACKEND_BASE_URL = 'http://localhost:8788'; // TODO: auf echte Backend-Domain umstellen, sobald deployed
+
+class OfferHopperProvider extends PriceProvider{
+  constructor(){
+    super('offerhopper', 'offerhopper.ai');
+  }
+
+  async getPrices(productName){
+    if(!userPos){ this.status = 'unavailable'; return []; }
+    try{
+      const location = userCityName || `${userPos.lat},${userPos.lon}`;
+      const url = `${BACKEND_BASE_URL}/api/offerhopper-price?items=${encodeURIComponent(productName)}&location=${encodeURIComponent(location)}`;
+      const res = await fetch(url);
+      if(!res.ok){
+        // Backend antwortet bewusst mit 502 statt erfundenen Preisen,
+        // wenn offerhopper selbst nicht erreichbar war (siehe server.js).
+        throw new Error('HTTP ' + res.status);
+      }
+      const json = await res.json();
+      this.status = 'ok';
+      return json.prices || [];
+    }catch(err){
+      this.status = 'error';
+      this.reason = `Backend-Proxy nicht erreichbar (läuft er unter ${BACKEND_BASE_URL}? siehe /combine-backend/README.md).`;
+      return [];
+    }
+  }
+}
+
+const PRICE_PROVIDERS = {
+  openprices: new OpenPricesProvider(),
+  offerhopper: new OfferHopperProvider(),
+  snapmarkt: new StubPriceProvider('snapmarkt', 'SnapMarkt', 'Quelle scrapt laut eigener Doku REWE/Lidl/Aldi/Penny-Webseiten - nicht eingebunden.'),
+  rewe: new StubPriceProvider('rewe', 'REWE', 'Keine offizielle oeffentliche REWE-Preis-API gefunden.'),
+  lidl: new StubPriceProvider('lidl', 'Lidl', 'Keine offizielle oeffentliche Lidl-Preis-API gefunden.'),
+  marktguru: new StubPriceProvider('marktguru', 'Marktguru', 'Keine oeffentliche Marktguru-API gefunden.')
+};
+
+async function comparePricesForItem(itemName){
+  const primary = PRICE_PROVIDERS.offerhopper;
+  const fallback = PRICE_PROVIDERS.openprices;
+  const stubs = Object.values(PRICE_PROVIDERS).filter(p => p !== primary && p !== fallback);
+
+  let prices = await primary.getPrices(itemName).catch(()=>[]);
+  let usedFallback = false;
+  if(!prices.length){
+    // offerhopper ist die Hauptquelle - Open Prices springt nur ein,
+    // wenn offerhopper fuer DIESES Produkt nichts liefert (nicht generell
+    // parallel, damit offerhopper wirklich die massgebliche Quelle ist).
+    prices = await fallback.getPrices(itemName).catch(()=>[]);
+    usedFallback = true;
+  }
+
+  const providerStatus = [primary, fallback, ...stubs].map(p => ({ key:p.key, name:p.name, status:p.status, reason:p.reason || null }));
+  return { prices: prices.sort((a,b)=> a.price - b.price), providerStatus, usedFallback };
+}
+
+/* ---------- Einkaufslisten (lokal, kein Backend) ---------- */
+const SHOPPING_LISTS_KEY = 'combine_shopping_lists_v1';
+function loadShoppingLists(){ try{ return JSON.parse(localStorage.getItem(SHOPPING_LISTS_KEY) || '[]'); }catch(e){ return []; } }
+function saveShoppingLists(lists){ try{ localStorage.setItem(SHOPPING_LISTS_KEY, JSON.stringify(lists)); }catch(e){} }
+
+let shoppingView = 'home'; // 'home' | 'list' | 'compare' | 'optimize' | 'offers'
+let activeListId = null;
+
+function goShopping(view, listId){
+  shoppingView = view;
+  if(listId !== undefined) activeListId = listId;
+  renderShoppingScreen();
+}
+
+function renderShoppingScreen(){
+  shoppingBack.style.display = shoppingView === 'home' ? 'none' : 'flex';
+  shoppingMenuBtn.style.display = shoppingView === 'home' ? 'flex' : 'none';
+  const titles = { home:'Einkauf', list:'Einkaufsliste', compare:'Preisvergleich', optimize:'Einkauf optimieren', offers:'Angebote in deiner Nähe' };
+  shoppingTitle.textContent = titles[shoppingView];
+  shoppingSub.style.display = shoppingView === 'home' ? 'block' : 'none';
+  closeShoppingMenu();
+
+  if(shoppingView === 'home') renderShoppingHome();
+  else if(shoppingView === 'list') renderShoppingList();
+  else if(shoppingView === 'compare') renderShoppingCompare();
+  else if(shoppingView === 'optimize') renderShoppingOptimize();
+  else if(shoppingView === 'offers') renderShoppingOffers();
+}
+shoppingBack.addEventListener('click', ()=> goShopping(shoppingView === 'compare' || shoppingView === 'optimize' ? 'list' : 'home'));
+
+function createNewList(){
+  const lists = loadShoppingLists();
+  const list = { id:'list_'+Date.now(), name:`Einkaufsliste ${lists.length+1}`, items:[], createdAt:Date.now() };
+  lists.unshift(list);
+  saveShoppingLists(lists);
+  goShopping('list', list.id);
+}
+
+/* ---------- Dropdown-Menü (ersetzt die vier separaten Aktions-Zeilen) ---------- */
+let shoppingMenuOpen = false;
+function closeShoppingMenu(){
+  shoppingMenuOpen = false;
+  const el = document.getElementById('shoppingMenuDropdown');
+  if(el) el.remove();
+}
+function toggleShoppingMenu(){
+  if(shoppingMenuOpen){ closeShoppingMenu(); return; }
+  shoppingMenuOpen = true;
+  const menu = document.createElement('div');
+  menu.id = 'shoppingMenuDropdown';
+  menu.className = 'dropdown-menu';
+  menu.innerHTML = `
+    <div class="dropdown-item" id="menuCreate">Einkaufsliste erstellen</div>
+    <div class="dropdown-item" id="menuUpload">Einkaufsliste hochladen</div>
+    <div class="dropdown-item" id="menuPhoto">Einkaufszettel fotografieren</div>
+    <div class="dropdown-item" id="menuLists">Meine Listen</div>
+  `;
+  shoppingMenuBtn.parentElement.appendChild(menu);
+  menu.querySelector('#menuCreate').addEventListener('click', ()=>{ closeShoppingMenu(); createNewList(); });
+  menu.querySelector('#menuUpload').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    ocrFileInput.removeAttribute('capture');
+    ocrFileInput.click();
+  });
+  menu.querySelector('#menuPhoto').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    ocrFileInput.setAttribute('capture','environment');
+    ocrFileInput.click();
+  });
+  menu.querySelector('#menuLists').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    document.getElementById('myListsSection')?.scrollIntoView({ behavior:'smooth' });
+  });
+}
+shoppingMenuBtn.addEventListener('click', toggleShoppingMenu);
+
+const ocrFileInput = document.createElement('input');
+ocrFileInput.type = 'file';
+ocrFileInput.accept = 'image/*';
+ocrFileInput.style.display = 'none';
+document.body.appendChild(ocrFileInput);
+ocrFileInput.addEventListener('change', handleOcrUpload);
+
+/* ---------- Echte Supermärkte in der Naehe (OpenStreetMap/Overpass) ----------
+   Dieselbe legitime, offene Datenquelle, die bereits fuer Ziel-Suche/Routing
+   genutzt wird - keine erfundene Haendlerliste. */
+let nearbyMarkets = [];
+let selectedMarkets = new Set();
+let marketsLoaded = false;
+
+function colorForBrand(name){
+  const palette = ['#C2410C','#0F6E56','#3B6EF6','#7C5CFC','#FF8A3D','#1E8E4F','#B33F7A','#0A5C48'];
+  let hash = 0;
+  for(const c of name) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  return palette[hash % palette.length];
+}
+function marketBadgeHtml(name, size=34){
+  const initial = (name.trim()[0] || '?').toUpperCase();
+  return `<div class="logo" style="background:${colorForBrand(name)}; width:${size}px; height:${size}px;"><span style="color:#fff; font-family:var(--font-display); font-weight:700; font-size:${Math.round(size*0.4)}px;">${initial}</span></div>`;
+}
+
+// Mehrere oeffentliche Overpass-Server, da die Hauptinstanz gelegentlich
+// ueberlastet ist - erst bei allen Fehlschlaegen wird aufgegeben.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter'
+];
+
+async function runOverpassQuery(query){
+  for(const endpoint of OVERPASS_ENDPOINTS){
+    try{
+      const res = await fetch(endpoint, { method:'POST', body: query });
+      if(!res.ok) continue;
+      const json = await res.json();
+      if(Array.isArray(json.elements)) return json.elements;
+    }catch(err){ /* naechsten Server versuchen */ }
+  }
+  return null; // alle Server fehlgeschlagen
+}
+
+let marketsCityOverride = null; // { name, lat, lon } - gesetzt durch die Stadtsuche, ueberschreibt den echten Standort
+
+function elementsToMarkets(elements, refPos){
+  const raw = elements
+    .map(el => ({
+      name: el.tags?.brand || el.tags?.name || 'Supermarkt',
+      lat: el.lat ?? el.center?.lat,
+      lon: el.lon ?? el.center?.lon
+    }))
+    .filter(s => s.lat && s.lon);
+
+  // Nach Marke buendeln (mehrere Filialen derselben Kette -> ein Chip),
+  // dabei die naechstgelegene Filiale je Marke fuer die Sortierung nutzen.
+  const byBrand = new Map();
+  raw.forEach(s=>{
+    const dist = refPos ? haversineMeters(refPos.lat, refPos.lon, s.lat, s.lon) : 0;
+    const existing = byBrand.get(s.name);
+    if(!existing || dist < existing.dist) byBrand.set(s.name, { name:s.name, dist });
+  });
+  return [...byBrand.values()].sort((a,b)=> a.dist - b.dist);
+}
+
+/** Liefert ALLE Supermaerkte in der massgeblichen Stadt - das ist entweder
+ *  eine per Stadtsuche gezielt ausgewaehlte Stadt (marketsCityOverride)
+ *  oder, wenn keine gesetzt ist, wie bisher die Stadt des echten
+ *  Standorts. Ueber die echte OSM-Verwaltungsgrenze (area-Query), nicht
+ *  nur einen Radius. Faellt auf einen grosszuegigen 15-km-Radius zurueck,
+ *  falls der Stadtname (noch) nicht bekannt ist oder die Grenzen-Abfrage
+ *  nichts liefert. */
+async function fetchNearbySupermarkets(){
+  const refPos = marketsCityOverride || userPos;
+  const refCityName = marketsCityOverride ? marketsCityOverride.name : userCityName;
+  if(!refPos) return [];
+
+  if(refCityName){
+    const areaQuery = `[out:json][timeout:25];area["name"="${refCityName}"]["boundary"="administrative"]->.a;(node["shop"="supermarket"](area.a);way["shop"="supermarket"](area.a););out center 200;`;
+    const elements = await runOverpassQuery(areaQuery);
+    if(elements && elements.length) return elementsToMarkets(elements, refPos);
+  }
+
+  // Fallback: Stadtname unbekannt oder keine Treffer ueber die Grenzen-Abfrage
+  const radius = 15000;
+  const radiusQuery = `[out:json][timeout:25];(node["shop"="supermarket"](around:${radius},${refPos.lat},${refPos.lon});way["shop"="supermarket"](around:${radius},${refPos.lat},${refPos.lon}););out center 100;`;
+  const elements = await runOverpassQuery(radiusQuery);
+  return elements ? elementsToMarkets(elements, refPos) : [];
+}
+
+async function ensureNearbyMarkets(force){
+  if(marketsLoaded && !force) return;
+  const result = await fetchNearbySupermarkets();
+  nearbyMarkets = result;
+  selectedMarkets = new Set(nearbyMarkets.map(m => m.name));
+  // Nur als "geladen" markieren, wenn es tatsaechlich Ergebnisse gab -
+  // ein einzelner fehlgeschlagener Versuch (z.B. Overpass ueberlastet)
+  // soll beim naechsten Aufruf der Einkauf-Seite erneut versucht werden,
+  // statt dauerhaft leer zu bleiben.
+  marketsLoaded = result.length > 0;
+}
+
+/* Locker pruefen, ob ein von einer Preisquelle gemeldeter Haendlername zu
+   einer der ausgewaehlten Supermarkt-Marken passt (Teilstring). Namen aus
+   zwei unabhaengigen Quellen (OpenStreetMap-Marken vs. offerhopper/Open-
+   Prices-Haendlernamen) schreiben sich oft leicht anders (Gross-/
+   Kleinschreibung, Umlaute, Rechtsform) - deshalb vor dem Vergleich
+   normalisieren statt nur toLowerCase(). */
+function normalizeBrandName(s){
+  return String(s || '')
+    .toLowerCase()
+    .replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ß/g,'ss')
+    .replace(/[^a-z0-9]/g, '');
+}
+function retailerMatchesSelection(retailerName){
+  if(selectedMarkets.size === 0) return true;
+  const r = normalizeBrandName(retailerName);
+  if(!r) return false;
+  return [...selectedMarkets].some(m => {
+    const nm = normalizeBrandName(m);
+    return nm && (r.includes(nm) || nm.includes(r));
+  });
+}
+
+const STAPLE_QUERIES = ['Milch', 'Brot', 'Butter', 'Eier', 'Kaffee', 'Nudeln'];
+
+async function renderShoppingHome(){
+  const lists = loadShoppingLists();
+  const marketsHeading = marketsCityOverride ? `Supermärkte in ${marketsCityOverride.name}` : 'Supermärkte in deiner Nähe';
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box" id="marketsLoadingNote">${(marketsCityOverride || userPos) ? 'Lade Supermärkte …' : 'Ermittle deinen Standort …'}</div>
+    <div class="food-lead">${marketsHeading}</div>
+    <div class="cat-scroll" id="marketChips"></div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin:16px 2px 8px;">
+      <div class="food-lead" style="margin:0;">Kürzlich gemeldete Preise</div>
+    </div>
+    <div id="dealsGrid" class="deals-grid"><div class="empty loading-pulse">Lade Preise …</div></div>
+
+    <div class="compare-row" id="optimizeCta" style="cursor:pointer; margin-top:18px; border-color:var(--accent);">
+      <div class="compare-top"><div class="compare-name">💸 Einkauf optimieren</div></div>
+      <div class="filter-note">Vergleicht deine gespeicherte Liste über alle Supermärkte hinweg – ein Markt oder maximale Ersparnis über mehrere Märkte.</div>
+    </div>
+
+    <div class="section-label" id="myListsSection">Deine Listen</div>
+    <div id="shoppingListsList"></div>
+  `;
+
+  document.getElementById('optimizeCta').addEventListener('click', ()=>{
+    const ls = loadShoppingLists();
+    if(!ls.length){ createNewList(); return; }
+    goShopping('optimize', ls[0].id);
+  });
+
+  const listsEl = document.getElementById('shoppingListsList');
+  if(!lists.length){
+    listsEl.innerHTML = '<div class="empty">Noch keine Einkaufsliste gespeichert.</div>';
+  }else{
+    lists.forEach(l=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.cursor = 'pointer';
+      row.innerHTML = chevronRowHtml(l.name, `${l.items.length} Produkt${l.items.length===1?'':'e'}`);
+      row.addEventListener('click', ()=> goShopping('list', l.id));
+      listsEl.appendChild(row);
+    });
+  }
+
+  await ensureNearbyMarkets();
+  const loadingNote = document.getElementById('marketsLoadingNote');
+  if(loadingNote){
+    const effectiveCityName = marketsCityOverride ? marketsCityOverride.name : userCityName;
+    if(nearbyMarkets.length){
+      loadingNote.textContent = effectiveCityName
+        ? `${nearbyMarkets.length} Supermärkte in ${effectiveCityName} gefunden (OpenStreetMap).`
+        : `${nearbyMarkets.length} Supermärkte in deiner Nähe gefunden (OpenStreetMap).`;
+    }else{
+      loadingNote.innerHTML = 'Keine Supermärkte gefunden – das kann an einer überlasteten Datenquelle liegen. <span id="retryMarkets" style="text-decoration:underline; cursor:pointer; font-weight:600;">Erneut versuchen</span>';
+      document.getElementById('retryMarkets')?.addEventListener('click', async ()=>{
+        loadingNote.textContent = 'Lade erneut …';
+        await ensureNearbyMarkets(true);
+        renderShoppingHome();
+      });
+    }
+  }
+
+  const chipsEl = document.getElementById('marketChips');
+  if(chipsEl){
+    chipsEl.innerHTML = nearbyMarkets.map(m => `
+      <div class="market-chip ${selectedMarkets.has(m.name) ? 'on' : ''}" data-name="${escapeHtml(m.name)}">
+        ${marketBadgeHtml(m.name, 22)}<span>${escapeHtml(m.name)}</span>
+      </div>
+    `).join('') || '<div class="empty">Keine Supermärkte gefunden.</div>';
+    chipsEl.querySelectorAll('.market-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const name = chip.dataset.name;
+        if(selectedMarkets.has(name)) selectedMarkets.delete(name); else selectedMarkets.add(name);
+        chip.classList.toggle('on');
+        renderDealsGrid();
+      });
+    });
+  }
+
+  renderDealsGrid();
+}
+
+/* =====================================================================
+   STADTSUCHE (Ergänzung, bestehende "Supermärkte in meiner Nähe" bleibt
+   unveraendert erhalten) - sucht gezielt eine Stadt (Nominatim, dieselbe
+   Quelle wie bei der Ziel-/Reverse-Geocoding-Suche) und ueberschreibt die
+   Supermarkt-Anzeige darauf, bis der Nutzer seinen Standort ueber den
+   bestehenden Standort-Button auf der Karte aktualisiert (siehe
+   locateAndLoad - setzt marketsCityOverride dort zurueck).
+   ===================================================================== */
+const citySearchBtn = document.getElementById('citySearchBtn');
+const citySearchPanel = document.getElementById('citySearchPanel');
+const citySearchInput = document.getElementById('citySearchInput');
+const citySearchResults = document.getElementById('citySearchResults');
+
+citySearchBtn.addEventListener('click', ()=>{
+  const show = citySearchPanel.style.display === 'none';
+  citySearchPanel.style.display = show ? 'block' : 'none';
+  if(show) citySearchInput.focus();
+});
+
+let citySearchTimer = null;
+citySearchInput.addEventListener('input', ()=>{
+  clearTimeout(citySearchTimer);
+  const q = citySearchInput.value.trim();
+  if(q.length < 2){ citySearchResults.innerHTML = ''; return; }
+  citySearchResults.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
+  citySearchTimer = setTimeout(()=> runCitySearch(q), 400);
+});
+
+async function runCitySearch(q){
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=5&featureType=city`, { headers: { 'Accept-Language':'de' } });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    renderCitySearchResults(results);
+  }catch(err){
+    citySearchResults.innerHTML = '<div class="empty">Suche gerade nicht möglich.</div>';
+  }
+}
+
+function renderCitySearchResults(results){
+  if(!results.length){
+    citySearchResults.innerHTML = '<div class="empty">Keine Stadt gefunden.</div>';
+    return;
+  }
+  citySearchResults.innerHTML = '';
+  results.forEach(r=>{
+    const shortName = r.name || r.display_name.split(',')[0];
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<div class="rowinfo"><div class="name">${escapeHtml(shortName)}</div><div class="meta">${escapeHtml(r.display_name)}</div></div>`;
+    row.addEventListener('click', ()=>{
+      marketsCityOverride = { name: shortName, lat: Number(r.lat), lon: Number(r.lon) };
+      citySearchPanel.style.display = 'none';
+      citySearchInput.value = '';
+      citySearchResults.innerHTML = '';
+      marketsLoaded = false; // erzwingt einen Neuabruf fuer die neue Stadt
+      renderShoppingHome();
+    });
+    citySearchResults.appendChild(row);
+  });
+}
+
+/* =====================================================================
+   DEV-ONLY: Backend-Erreichbarkeits-Anzeige.
+   NICHT fuer die fertige App gedacht - bitte vor dem Live-Gang entfernen
+   (diesen ganzen Block + das Badge-Element "backendStatusBadge" im HTML).
+   ===================================================================== */
+const DEV_SHOW_BACKEND_STATUS = true; // <- vor dem Live-Gang auf false stellen oder Block entfernen
+const backendStatusBadge = document.getElementById('backendStatusBadge');
+
+async function checkBackendHealthDev(){
+  if(!DEV_SHOW_BACKEND_STATUS) return;
+  try{
+    const res = await fetch(BACKEND_BASE_URL + '/', { signal: AbortSignal.timeout(3000) });
+    backendStatusBadge.style.display = res.ok ? 'none' : 'flex';
+  }catch(err){
+    backendStatusBadge.style.display = 'flex';
+  }
+}
+if(DEV_SHOW_BACKEND_STATUS){
+  checkBackendHealthDev();
+  setInterval(checkBackendHealthDev, 15000); // alle 15s neu pruefen, waehrend die App offen ist
+}
+
+async function renderDealsGrid(){
+  const grid = document.getElementById('dealsGrid');
+  if(!grid) return;
+  const activeList = loadShoppingLists()[0];
+  const queries = (activeList?.items?.length ? activeList.items.map(i=>i.name) : STAPLE_QUERIES).slice(0, 6);
+
+  const results = await Promise.all(queries.map(async q => ({ query:q, ...(await comparePricesForItem(q)) })));
+  const cards = [];
+  results.forEach(r=>{
+    // WICHTIG: kein Fallback auf r.prices[0] mehr - das zeigte bisher eine
+    // beliebige, nicht ausgewaehlte Marke an, wenn keine der ausgewaehlten
+    // Maerkte einen Preis fuer dieses Produkt hatte (der gemeldete Bug).
+    const match = r.prices.find(p => retailerMatchesSelection(p.retailer));
+    if(match) cards.push({ query:r.query, ...match });
+  });
+
+  if(!cards.length){
+    grid.innerHTML = '<div class="empty">Für die ausgewählten Supermärkte aktuell keine gemeldeten Preise gefunden.</div>';
+    return;
+  }
+  grid.innerHTML = cards.map(c => `
+    <div class="deal-card">
+      <div class="deal-thumb">${c.imageUrl ? `<img src="${c.imageUrl}" alt="" loading="lazy">` : '🛒'}</div>
+      <div class="deal-name">${escapeHtml(c.productName || c.query)}</div>
+      <div class="deal-price">${c.price.toFixed(2)} €</div>
+      <div class="deal-meta">${escapeHtml(c.retailer)} · ${timeAgoLabel(c.reportedAt) || 'Datum unbekannt'}</div>
+    </div>
+  `).join('');
+}
+
+
+
+async function handleOcrUpload(e){
+  const file = e.target.files?.[0];
+  if(!file) return;
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Zettel wird gelesen (Texterkennung) …</div>';
+  try{
+    const { data } = await Tesseract.recognize(file, 'deu');
+    const lines = data.text.split('\n').map(l=>l.trim()).filter(Boolean);
+    const items = lines.map(parseShoppingLine).filter(it => it.name);
+
+    const lists = loadShoppingLists();
+    const list = { id:'list_'+Date.now(), name:`Erkannte Liste ${lists.length+1}`, items, createdAt:Date.now() };
+    lists.unshift(list);
+    saveShoppingLists(lists);
+
+    shoppingContent.innerHTML = `<div class="disclaimer-box">Wir haben ${items.length} Produkt${items.length===1?'':'e'} erkannt. Texterkennung funktioniert am zuverlässigsten bei gedruckter/getippter Schrift – bei handschriftlichen Zetteln bitte die Liste danach kurz prüfen.</div>`;
+    setTimeout(()=> goShopping('list', list.id), 900);
+  }catch(err){
+    shoppingContent.innerHTML = '<div class="empty">Texterkennung fehlgeschlagen. Bitte die Liste manuell anlegen.</div>';
+  }
+}
+
+/** Einfache Heuristik: "2x Eier", "2 Eier", "Eier" -> {qty, name}. Menge/Einheit
+ *  sind bewusst konservativ - Fehlererkennung soll der Nutzer im naechsten
+ *  Schritt selbst korrigieren koennen, statt falsch geraten zu werden. */
+function parseShoppingLine(line){
+  const m = line.match(/^(\d+)\s*[x×]?\s*(.+)$/i);
+  if(m) return { name: m[2].trim(), qty: Number(m[1]), unit: 'Stück' };
+  return { name: line, qty: 1, unit: 'Stück' };
+}
+
+function getActiveList(){
+  return loadShoppingLists().find(l => l.id === activeListId) || null;
+}
+function updateActiveList(mutator){
+  const lists = loadShoppingLists();
+  const list = lists.find(l => l.id === activeListId);
+  if(!list) return;
+  mutator(list);
+  saveShoppingLists(lists);
+  renderShoppingList();
+}
+
+function renderShoppingList(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  shoppingTitle.textContent = list.name;
+
+  const itemsHtml = list.items.map((it, i)=>`
+    <div class="row" style="cursor:default;">
+      <div class="rowinfo">
+        <div class="name">${escapeHtml(it.name)}</div>
+        <div class="meta">${it.qty} × ${escapeHtml(it.unit)}</div>
+      </div>
+      <div class="goto" data-i="${i}" data-act="remove" style="cursor:pointer;">Entfernen</div>
+    </div>
+  `).join('');
+
+  shoppingContent.innerHTML = `
+    ${list.items.length ? itemsHtml : '<div class="empty">Noch keine Produkte in dieser Liste.</div>'}
+    <div class="filter-section">
+      <div class="field-label">Neues Produkt</div>
+      <input class="field-input" id="newItemName" placeholder="z.B. Milch" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <input class="field-input" id="newItemQty" type="number" min="1" value="1" style="width:70px;">
+        <select class="field-input" id="newItemUnit" style="flex:1;">
+          <option>Stück</option><option>Liter</option><option>ml</option><option>kg</option><option>g</option><option>Packung</option>
+        </select>
+      </div>
+      <div class="detail-btn" id="addItemBtn" style="margin-top:10px;">Hinzufügen</div>
+    </div>
+    <div class="detail-btn" id="compareBtn" style="margin-top:6px;" ${list.items.length?'':'disabled'}>Preise vergleichen</div>
+  `;
+
+  shoppingContent.querySelectorAll('[data-act="remove"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> updateActiveList(l => l.items.splice(Number(btn.dataset.i), 1)));
+  });
+  document.getElementById('addItemBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newItemName').value.trim();
+    if(!name) return;
+    const qty = Math.max(1, Number(document.getElementById('newItemQty').value) || 1);
+    const unit = document.getElementById('newItemUnit').value;
+    updateActiveList(l => l.items.push({ name, qty, unit }));
+  });
+  document.getElementById('compareBtn').addEventListener('click', ()=> goShopping('compare', list.id));
+}
+
+async function renderShoppingCompare(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  if(!list.items.length){
+    shoppingContent.innerHTML = '<div class="empty">Diese Liste enthält keine Produkte.</div>';
+    return;
+  }
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Preise werden verglichen …</div>';
+
+  const results = await Promise.all(list.items.map(async it => ({ item: it, ...(await comparePricesForItem(it.name)) })));
+
+  const statusRow = results[0]?.providerStatus.map(s=>{
+    const icon = s.status === 'ok' ? '✓' : (s.status === 'unavailable' ? '—' : '⚠️');
+    const color = s.status === 'ok' ? 'var(--ok)' : 'var(--ink-soft)';
+    return `<div class="provider-status-chip"><span>${s.name}</span> <span style="color:${color}">${icon}</span></div>`;
+  }).join('') || '';
+
+  const itemsHtml = results.map(r=>{
+    if(!r.prices.length){
+      return `<div class="compare-row"><div class="compare-name">${escapeHtml(r.item.name)}</div><div class="filter-note">Kein gemeldeter Preis gefunden (Open Prices) – ${r.item.qty} × ${escapeHtml(r.item.unit)}.</div></div>`;
+    }
+    const cheapest = r.prices[0];
+    const rows = r.prices.slice(0,4).map(p=>`
+      <div class="menu-item-row">
+        <div class="menu-item-top">
+          <div>
+            <div class="menu-item-name">${escapeHtml(p.retailer)}</div>
+            <div class="menu-item-desc">${timeAgoLabel(p.reportedAt) || 'Datum unbekannt'}${p.discounted ? ' · reduziert' : ''}</div>
+          </div>
+          <div class="menu-item-price">${p.originalPrice ? `<span class="orig">${p.originalPrice.toFixed(2)} €</span>` : ''}${p.price.toFixed(2)} €</div>
+        </div>
+      </div>
+    `).join('');
+    return `
+      <div class="compare-row">
+        <div class="compare-top"><div class="compare-name">${escapeHtml(r.item.name)} <span style="font-weight:400; color:var(--ink-soft); font-size:12px;">(${r.item.qty} × ${escapeHtml(r.item.unit)})</span></div></div>
+        ${rows}
+        <div class="offer-badge">Günstigster gemeldeter Preis: ${cheapest.retailer} – ${cheapest.price.toFixed(2)} €</div>
+      </div>
+    `;
+  }).join('');
+
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box">Hauptquelle: <b>offerhopper.ai</b> (live abgefragt, deckt REWE/Aldi/dm/Rossmann/Lidl/Penny/Netto/Norma/Edeka/Globus ab). <b>Open Prices</b> springt nur ein, wenn offerhopper für ein Produkt nichts liefert (community-gemeldet, mit Zeitstempel). SnapMarkt/REWE/Lidl/Marktguru direkt sind weiterhin nicht angebunden (siehe Anbieter-Status).</div>
+    <div class="provider-status-row">${statusRow}</div>
+    ${itemsHtml}
+  `;
+}
+
+/* =====================================================================
+   MAXIMAL SPAREN - Optimierung
+   Zwei Modi:
+   - "Ein Markt": findet den guenstigsten EINZELNEN Haendler, der
+     moeglichst alle Produkte der Liste abdeckt.
+   - "Maximal sparen": waehlt je Produkt unabhaengig den guenstigsten
+     verfuegbaren Haendler - zeigt zusaetzlich, wie viele Maerkte dafuer
+     noetig waeren, und die Ersparnis gegenueber dem besten Ein-Markt-Preis.
+   Rechnet ausschliesslich mit echten, zuvor abgerufenen Open-Prices-Daten -
+   keine erfundenen Preise. Mengen (qty) fliessen in die Summe ein.
+   ===================================================================== */
+
+function computeSingleMarketTotals(perItem){
+  const retailers = new Set();
+  perItem.forEach(r => r.prices.forEach(p => retailers.add(p.retailer)));
+  return [...retailers].map(retailer=>{
+    let total = 0, covered = 0;
+    perItem.forEach(r=>{
+      const hit = r.prices.find(p => p.retailer === retailer);
+      if(hit){ total += hit.price * r.item.qty; covered++; }
+    });
+    return { retailer, total, covered, coversAll: covered === perItem.length };
+  }).sort((a,b)=> (Number(b.coversAll) - Number(a.coversAll)) || (a.total - b.total));
+}
+
+function computeMaxSavings(perItem){
+  let total = 0;
+  const usedRetailers = new Set();
+  const breakdown = perItem.map(r=>{
+    if(!r.prices.length) return { item:r.item, retailer:null, price:null };
+    const cheapest = r.prices[0]; // von comparePricesForItem bereits aufsteigend sortiert
+    total += cheapest.price * r.item.qty;
+    usedRetailers.add(cheapest.retailer);
+    return { item:r.item, retailer:cheapest.retailer, price:cheapest.price };
+  });
+  return { total, storeCount: usedRetailers.size, breakdown };
+}
+
+let optimizeMode = 'single'; // 'single' | 'max'
+let optimizeRouteCache = {}; // { single: route|null, max: route|null } - vermeidet doppelte Anfragen beim Umschalten
+
+async function renderShoppingOptimize(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  if(!list.items.length){
+    shoppingContent.innerHTML = '<div class="empty">Diese Liste enthält keine Produkte.</div>';
+    return;
+  }
+  optimizeRouteCache = {};
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Einkauf wird optimiert …</div>';
+  await renderOptimizeShell(list);
+}
+
+async function renderOptimizeShell(list){
+  shoppingContent.innerHTML = `
+    <div class="segmented" id="optimizeSeg">
+      <div class="segmented-opt" data-m="single">🏪 Nur ein Markt</div>
+      <div class="segmented-opt" data-m="max">💰 Maximal sparen</div>
+    </div>
+    <div id="optimizeBody" style="margin-top:16px;"><div class="empty loading-pulse">Route wird berechnet …</div></div>
+  `;
+  const seg = document.getElementById('optimizeSeg');
+  seg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', opt.dataset.m === optimizeMode);
+    opt.addEventListener('click', ()=>{
+      optimizeMode = opt.dataset.m;
+      renderOptimizeShell(list);
+    });
+  });
+  await loadAndRenderOptimize(list);
+}
+
+/** Baut aus der Einkaufsliste einen natuersprachlichen Text ("2x Milch, Eier, Butter"),
+ *  wie ihn plan_optimal_shopping_route erwartet. */
+function listToItemsText(list){
+  return list.items.map(it => it.qty > 1 ? `${it.qty}x ${it.name}` : it.name).join(', ');
+}
+
+async function loadAndRenderOptimize(list){
+  const body = document.getElementById('optimizeBody');
+  const cacheKey = optimizeMode;
+
+  if(optimizeRouteCache[cacheKey] !== undefined){
+    renderOptimizeBody(optimizeRouteCache[cacheKey], list);
+    return;
+  }
+
+  try{
+    if(!userPos) throw new Error('kein Standort');
+    const itemsText = listToItemsText(list);
+    const location = userCityName || `${userPos.lat},${userPos.lon}`;
+    const maxStores = optimizeMode === 'single' ? 1 : undefined;
+    const url = `${BACKEND_BASE_URL}/api/offerhopper-price?items=${encodeURIComponent(itemsText)}&location=${encodeURIComponent(location)}${maxStores ? `&max_stores=${maxStores}` : ''}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if(!json.route) throw new Error('keine Route in der Antwort');
+    optimizeRouteCache[cacheKey] = json.route;
+    renderOptimizeBody(json.route, list);
+  }catch(err){
+    // offerhopper nicht erreichbar/kein Ergebnis - ehrlich auf die eigene,
+    // auf Open-Prices-Einzelabfragen basierende Naeherung zurueckfallen,
+    // statt die Funktion komplett auszublenden.
+    optimizeRouteCache[cacheKey] = null;
+    await renderOwnOptimizeFallback(list, body);
+  }
+}
+
+function renderOptimizeBody(route, list){
+  const body = document.getElementById('optimizeBody');
+  if(!body) return;
+
+  if(!route){
+    body.innerHTML = ''; // renderOwnOptimizeFallback hat bereits selbst gerendert
+    return;
+  }
+
+  const storeNames = route.stores.map(s => s.name).join(', ');
+  const verdictLabel = route.worthTheTrip ? '✅ Lohnt sich' : '⚠️ Eher nicht lohnenswert';
+  const verdictColor = route.worthTheTrip ? 'var(--ok)' : 'var(--err)';
+
+  body.innerHTML = `
+    <div class="nav-info-stats">
+      <div class="nav-info-stat"><b>${route.totalCost != null ? route.totalCost.toFixed(2)+' €' : '–'}</b><span>Gesamtpreis</span></div>
+      <div class="nav-info-stat"><b>${route.stores.length}</b><span>Markt${route.stores.length===1?'':'e'} nötig</span></div>
+      <div class="nav-info-stat"><b>${route.totalTimeWithShoppingMinutes != null ? Math.round(route.totalTimeWithShoppingMinutes)+' Min.' : '–'}</b><span>inkl. Einkauf</span></div>
+    </div>
+    <div class="disclaimer-box" style="border-color:${verdictColor};">
+      <b style="color:${verdictColor};">${verdictLabel}</b> laut offerhopper.ai – berücksichtigt Weg- und Zeitaufwand, nicht nur den reinen Warenpreis.
+      ${route.totalSavings != null ? ` Ersparnis ggü. der günstigsten Einzelpreis-Kombination: ${route.totalSavings.toFixed(2)} €.` : ''}
+    </div>
+    <div class="section-label">Route</div>
+    <div class="filter-note" style="margin-bottom:10px;">${escapeHtml(storeNames)}${route.totalDistanceKm != null ? ` · ${route.totalDistanceKm.toFixed(1)} km zu Fuß` : ''}</div>
+    <div class="section-label">Einkaufsliste je Markt</div>
+    ${route.items.map(it=>`
+      <div class="menu-item-row">
+        <div class="menu-item-top">
+          <div>
+            <div class="menu-item-name">${escapeHtml(it.selectedProduct || it.name)}</div>
+            <div class="menu-item-desc">${escapeHtml(it.store)} · ${it.quantity}× ${escapeHtml(it.unit)}</div>
+          </div>
+          <div class="menu-item-price">${it.regularPrice && it.regularPrice !== it.price ? `<span class="orig">${it.regularPrice.toFixed(2)} €</span>` : ''}${it.totalCost.toFixed(2)} €</div>
+        </div>
+      </div>
+    `).join('')}
+    ${route.shareUrl ? `<a class="detail-btn fallback" href="${route.shareUrl}" target="_blank" rel="noopener" style="display:block; margin-top:14px; text-align:center;">Interaktive Karte ansehen</a>` : ''}
+  `;
+}
+
+/* ---------- Fallback: eigene Naeherung auf Basis einzelner Open-Prices-
+   Abfragen, falls offerhopper.ai gerade nicht erreichbar ist. ---------- */
+async function renderOwnOptimizeFallback(list, body){
+  body.innerHTML = '<div class="empty loading-pulse">offerhopper.ai nicht erreichbar – eigene Näherung wird berechnet …</div>';
+
+  const perItem = await Promise.all(list.items.map(async it => ({ item: it, ...(await comparePricesForItem(it.name)) })));
+  const withData = perItem.filter(r => r.prices.length);
+
+  if(!withData.length){
+    body.innerHTML = '<div class="disclaimer-box">offerhopper.ai ist gerade nicht erreichbar, und für die Produkte dieser Liste liegen auch keine Open-Prices-Daten vor – Optimierung aktuell nicht möglich.</div>';
+    return;
+  }
+
+  const missingCount = list.items.length - withData.length;
+
+  if(optimizeMode === 'single'){
+    const singleTotals = computeSingleMarketTotals(withData);
+    const bestSingle = singleTotals[0] || null;
+    body.innerHTML = `
+      <div class="disclaimer-box">offerhopper.ai gerade nicht erreichbar – Näherung auf Basis einzelner Open-Prices-Meldungen (ohne Wegkosten-Berechnung).${missingCount>0 ? ` Für ${missingCount} Produkt${missingCount===1?'':'e'} liegen keine Preise vor.` : ''}</div>
+      ${bestSingle ? `
+        <div class="nav-info-stats">
+          <div class="nav-info-stat"><b>${bestSingle.total.toFixed(2)} €</b><span>${bestSingle.coversAll ? 'Gesamt' : `nur ${bestSingle.covered}/${list.items.length} Produkte`}</span></div>
+        </div>
+        <div class="section-label">🏆 Günstigster Gesamteinkauf</div>
+        ${singleTotals.slice(0,5).map((s,i)=>`
+          <div class="compare-row ${i===0?'selected':''}">
+            <div class="compare-top"><div class="compare-name">${escapeHtml(s.retailer)}</div>${i===0?'<div class="compare-check">✓</div>':''}</div>
+            <div class="filter-note">${s.total.toFixed(2)} € · deckt ${s.covered}/${list.items.length} Produkte ab</div>
+          </div>
+        `).join('')}
+      ` : '<div class="empty">Kein Markt mit gemeldeten Preisen gefunden.</div>'}
+    `;
+  }else{
+    const maxSaving = computeMaxSavings(withData);
+    body.innerHTML = `
+      <div class="disclaimer-box">offerhopper.ai gerade nicht erreichbar – Näherung auf Basis einzelner Open-Prices-Meldungen (ohne Wegkosten-Berechnung).${missingCount>0 ? ` Für ${missingCount} Produkt${missingCount===1?'':'e'} liegen keine Preise vor.` : ''}</div>
+      <div class="nav-info-stats">
+        <div class="nav-info-stat"><b>${maxSaving.total.toFixed(2)} €</b><span>Optimierter Preis</span></div>
+        <div class="nav-info-stat"><b>${maxSaving.storeCount}</b><span>Märkte nötig</span></div>
+      </div>
+      ${maxSaving.storeCount > 1 ? `<div class="filter-note">⚠️ Dafür musst du ${maxSaving.storeCount} verschiedene Märkte besuchen.</div>` : ''}
+      <div class="section-label">Aufteilung je Produkt</div>
+      ${maxSaving.breakdown.map(b=>`
+        <div class="menu-item-row">
+          <div class="menu-item-top">
+            <div>
+              <div class="menu-item-name">${escapeHtml(b.item.name)}</div>
+              <div class="menu-item-desc">${b.retailer ? escapeHtml(b.retailer) : 'kein Preis gefunden'}</div>
+            </div>
+            <div class="menu-item-price">${b.price != null ? b.price.toFixed(2)+' €' : '–'}</div>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+}
+
+function renderShoppingOffers(){
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box"><b>Noch nicht verfügbar:</b> Für Marktguru wurde keine öffentliche API gefunden. Die Architektur (OfferProvider-Schicht, PLZ-Filterung) ist vorbereitet, sobald eine zulässige Datenquelle gefunden oder eine Partnerschaft verfügbar ist.</div>
+  `;
+}
+
+
+
+/* =====================================================================
    SCOOTER WATCH
    Lokal gespeicherte Suchalarme (localStorage, kein Backend). Bei jedem
    Datenabgleich (loadNearby) wird geprueft, ob NEU ein passendes
@@ -715,6 +1701,7 @@ const watchBody = document.getElementById('watchBody');
 let watchView = 'list'; // 'list' | 'create'
 let watchDraftProviders = new Set(Object.keys(PROVIDER_META));
 let watchDraftRadius = 500;
+let watchDraftMinCount = 1;
 
 function openWatch(){ watchView = 'list'; renderWatchScreen(); watchOverlay.classList.add('show'); }
 function closeWatch(){ watchOverlay.classList.remove('show'); }
@@ -745,6 +1732,7 @@ function renderWatchList(){
   watchBody.querySelector('#watchAddBtn').addEventListener('click', ()=>{
     watchDraftProviders = new Set(Object.keys(PROVIDER_META));
     watchDraftRadius = 500;
+    watchDraftMinCount = 1;
     watchView = 'create';
     renderWatchScreen();
   });
@@ -762,6 +1750,7 @@ function renderWatchList(){
       <div class="compare-top">
         <div class="compare-name">${metersLabel(w.radiusM)} · ${escapeHtml(providerNames)}</div>
       </div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Benachrichtigen ab ${w.minCount || 1} Scooter${(w.minCount||1) > 1 ? 'n' : ''}</div>
       <div style="font-size:11.5px; color:${w.active ? 'var(--ok)' : 'var(--ink-soft)'}; font-weight:600; margin-bottom:10px;">${w.active ? '● Aktiv' : '○ Pausiert'}</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <div class="goto" data-act="toggle" style="cursor:pointer;">${w.active ? 'Pausieren' : 'Aktivieren'}</div>
@@ -799,6 +1788,13 @@ function renderWatchCreate(){
       <div class="filter-label">Radius <span id="watchRadiusValue"></span></div>
       <input type="range" id="watchRadiusSlider" class="filter-slider" min="100" max="2000" step="50">
     </div>
+    <div class="filter-section">
+      <div class="filter-label">Benachrichtigen ab</div>
+      <div class="segmented" id="watchCountSeg">
+        ${[1,2,3,5,10].map(n=>`<div class="segmented-opt" data-n="${n}">${n}</div>`).join('')}
+      </div>
+      <div class="filter-note">Erst wenn mindestens diese Anzahl passender Scooter gleichzeitig in Reichweite ist.</div>
+    </div>
     <div class="detail-btn" id="watchSaveBtn" style="margin-top:6px;">Watch aktivieren</div>
   `;
   watchBody.querySelector('#watchBackBtn').addEventListener('click', ()=>{ watchView='list'; renderWatchScreen(); });
@@ -825,6 +1821,15 @@ function renderWatchCreate(){
     radiusValue2.textContent = metersLabel(watchDraftRadius);
   });
 
+  const countSeg = watchBody.querySelector('#watchCountSeg');
+  countSeg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', Number(opt.dataset.n) === watchDraftMinCount);
+    opt.addEventListener('click', ()=>{
+      watchDraftMinCount = Number(opt.dataset.n);
+      renderWatchCreate();
+    });
+  });
+
   watchBody.querySelector('#watchSaveBtn').addEventListener('click', ()=>{
     if(watchDraftProviders.size === 0) return;
     const all = loadWatches();
@@ -832,8 +1837,9 @@ function renderWatchCreate(){
       id: 'watch_' + Date.now(),
       providers: [...watchDraftProviders],
       radiusM: watchDraftRadius,
+      minCount: watchDraftMinCount,
       active: true,
-      seenIds: []
+      aboveThreshold: false // Kante: erst benachrichtigen, wenn dies von false auf true wechselt
     });
     saveWatches(all);
     if('Notification' in window && Notification.permission === 'default'){
@@ -855,9 +1861,12 @@ function showToast(title, body){
   setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-12px)'; setTimeout(()=> el.remove(), 300); }, 4500);
 }
 
-function notifyScooterFound(watch, vehicle){
+function notifyScooterFound(watch, matchCount, nearest){
   const title = '🛴 Scooter verfügbar';
-  const body = `Ein Scooter von ${PROVIDER_META[vehicle.provider].name} ist jetzt ${metersLabel(vehicle.dist)} von dir entfernt.`;
+  const plural = matchCount > 1 ? 'Scooter sind' : 'Scooter ist';
+  const body = watch.minCount > 1
+    ? `${matchCount} passende ${plural} jetzt in deinem Watch-Radius verfügbar (mind. ${watch.minCount} gewünscht).`
+    : `Ein Scooter von ${PROVIDER_META[nearest.provider].name} ist jetzt ${metersLabel(nearest.dist)} von dir entfernt.`;
   if('Notification' in window && Notification.permission === 'granted'){
     try{ new Notification(title, { body }); return; }catch(e){}
   }
@@ -865,7 +1874,11 @@ function notifyScooterFound(watch, vehicle){
 }
 
 /* Wird nach jedem Laden neuer Fahrzeugdaten aufgerufen (siehe loadNearby).
-   Prueft unabhaengig von den Kartenfiltern auf ALLEN geladenen Fahrzeugen. */
+   Prueft unabhaengig von den Kartenfiltern auf ALLEN geladenen Fahrzeugen.
+   Kantengetriggert: benachrichtigt nur beim UEBERSCHREITEN des
+   Schwellenwerts (von "darunter" zu "darueber/gleich") - eine erneute
+   Benachrichtigung ist erst moeglich, nachdem der Bestand wieder unter
+   den Schwellenwert gefallen und danach erneut gestiegen ist. */
 function checkScooterWatches(){
   if(!userPos) return;
   const watches = loadWatches();
@@ -873,17 +1886,19 @@ function checkScooterWatches(){
   let changed = false;
   watches.forEach(w=>{
     if(!w.active) return;
-    const matchIds = lastNearbyVehicles
+    const minCount = w.minCount || 1;
+    const matches = lastNearbyVehicles
       .filter(v => w.providers.includes(v.provider) && v.dist != null && v.dist <= w.radiusM)
-      .map(v => v.id);
-    const prevSeen = new Set(w.seenIds || []);
-    const newIds = matchIds.filter(id => !prevSeen.has(id));
-    newIds.forEach(id=>{
-      const vehicle = lastNearbyVehicles.find(v=>v.id===id);
-      if(vehicle) notifyScooterFound(w, vehicle);
-    });
-    if(newIds.length || matchIds.length !== w.seenIds?.length){
-      w.seenIds = matchIds;
+      .sort((a,b)=> a.dist - b.dist);
+
+    const isAbove = matches.length >= minCount;
+    const wasAbove = !!w.aboveThreshold;
+
+    if(isAbove && !wasAbove){
+      notifyScooterFound(w, matches.length, matches[0]);
+    }
+    if(isAbove !== wasAbove){
+      w.aboveThreshold = isAbove;
       changed = true;
     }
   });
@@ -908,6 +1923,27 @@ function checkScooterWatches(){
    ===================================================================== */
 
 const OSRM_BASE = 'https://router.project-osrm.org';
+
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+
+/* War versehentlich aus dem Code verschwunden (Ursache des "keine Route
+   verfuegbar"-Fehlers fuer wirklich jede Anfrage) - hier wiederhergestellt,
+   zusaetzlich mit einem einmaligen Retry bei HTTP 429 (Rate-Limit des
+   oeffentlichen Demo-Servers), da mehrere Scooter kurz hintereinander
+   verglichen werden. */
+async function fetchOsrmRoute(profile, from, to, _retried){
+  const url = `${OSRM_BASE}/route/v1/${profile}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
+  const res = await fetch(url);
+  if(res.status === 429 && !_retried){
+    await sleep(600);
+    return fetchOsrmRoute(profile, from, to, true);
+  }
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if(json.code !== 'Ok' || !json.routes?.length) throw new Error('keine Route');
+  return json.routes[0];
+}
+
 const routeOverlay = document.getElementById('routeOverlay');
 const routeSearchInput = document.getElementById('routeSearchInput');
 const routeSuggestions = document.getElementById('routeSuggestions');
@@ -1009,119 +2045,193 @@ function routeContainsBundesstrasse(route){
   return steps.some(s => BUNDESSTRASSE_REF.test(s.ref || '') || /Bundesstraße/i.test(s.name || ''));
 }
 
-async function fetchOsrmRoute(profile, from, to){
-  const url = `${OSRM_BASE}/route/v1/${profile}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-  if(json.code !== 'Ok' || !json.routes?.length) throw new Error('keine Route');
-  return json.routes[0];
+/* Kapselt die bestehende E-Scooter-Routing-Logik (cycling + Bundesstrasse-
+   Erkennung + walking-Fallback) wiederverwendbar fuer eine beliebige
+   Start->Ziel-Strecke - wird gleich fuer JEDEN verglichenen Scooter einzeln
+   aufgerufen (Scooter->Ziel), nicht mehr nur einmal fuer die ganze Route. */
+async function computeScooterLeg(from, to){
+  let route = await fetchOsrmRoute('cycling', from, to);
+  let usedProfile = 'cycling';
+  if(routeContainsBundesstrasse(route)){
+    try{
+      route = await fetchOsrmRoute('walking', from, to);
+      usedProfile = 'walking';
+    }catch(fallbackErr){ /* bei Rad-Route bleiben, s.u. stillHasBundesstrasse */ }
+  }
+  return { route, usedProfile, stillHasBundesstrasse: usedProfile === 'cycling' && routeContainsBundesstrasse(route) };
 }
+
+const routeLegCache = new Map(); // vermeidet doppelte OSRM-Anfragen bei erneutem Vergleich derselben Kombination
+
+const WALK_CACHE_TTL_MS = 20_000; // Standort/Scooter aendern sich schnell - nur kurz cachen
+const walkLegCache = new Map();
+async function cachedFetchWalk(from, to, cacheKey){
+  const hit = walkLegCache.get(cacheKey);
+  if(hit && Date.now() - hit.at < WALK_CACHE_TTL_MS) return hit.route;
+  const route = await fetchOsrmRoute('walking', from, to);
+  walkLegCache.set(cacheKey, { route, at: Date.now() });
+  return route;
+}
+async function cachedComputeScooterLeg(from, to, cacheKey){
+  if(routeLegCache.has(cacheKey)) return routeLegCache.get(cacheKey);
+  const result = await computeScooterLeg(from, to);
+  routeLegCache.set(cacheKey, result);
+  return result;
+}
+
+const MAX_COMPARE_CANDIDATES = 5; // begrenzt OSRM-Anfragen (oeffentlicher Demo-Server, faire Nutzung)
+let compareCandidates = [];       // zuletzt berechnete Vergleichsergebnisse
+let selectedCompareId = null;
+let currentDest = null;
 
 async function selectDestination(r){
   routeSuggestions.innerHTML = '';
   routeSearchInput.value = r.name || r.display_name.split(',')[0];
-  routeResult.innerHTML = '<div class="empty loading-pulse">Route wird berechnet …</div>';
+  routeResult.innerHTML = '<div class="empty loading-pulse">Scooter werden verglichen …</div>';
+  selectedCompareId = null;
 
   if(!userPos){
     routeResult.innerHTML = '<div class="empty">Standort wird noch ermittelt – bitte kurz warten.</div>';
     return;
   }
 
-  const dest = { lat: Number(r.lat), lon: Number(r.lon) };
-  try{
-    let route = await fetchOsrmRoute('cycling', userPos, dest);
-    let usedProfile = 'cycling';
+  currentDest = { lat: Number(r.lat), lon: Number(r.lon), label: r.display_name };
 
-    if(routeContainsBundesstrasse(route)){
-      try{
-        const walkingRoute = await fetchOsrmRoute('walking', userPos, dest);
-        route = walkingRoute;
-        usedProfile = 'walking';
-      }catch(fallbackErr){
-        // Fussweg-Route nicht verfuegbar -> bei der Rad-Route bleiben,
-        // aber in der UI ehrlich auf die Bundesstrasse hinweisen.
-      }
-    }
-    drawRoute(route, dest, r.display_name, usedProfile);
-  }catch(err){
-    routeResult.innerHTML = '<div class="empty">Route konnte nicht berechnet werden. Anderes Ziel versuchen.</div>';
+  const candidates = [...vehiclesById.values()]
+    .filter(v => v.dist != null)
+    .sort((a,b) => a.dist - b.dist)
+    .slice(0, MAX_COMPARE_CANDIDATES);
+
+  if(!candidates.length){
+    routeResult.innerHTML = '<div class="empty">Keine Scooter in der Nähe zum Vergleichen geladen.</div>';
+    return;
   }
+
+  // Begrenzte Parallelitaet (2 gleichzeitig) statt strikt nacheinander:
+  // deutlich schneller als eine feste Pause zwischen jedem Kandidaten, aber
+  // immer noch kein Burst von 5+ Anfragen auf einmal gegen den oeffentlichen
+  // OSRM-Server. Ein einzelner fehlgeschlagener Kandidat blockiert die
+  // anderen nicht (try/catch pro Kandidat).
+  const COMPARE_CONCURRENCY = 2;
+  compareCandidates = [];
+  let completed = 0;
+
+  async function compareOne(v){
+    try{
+      const scooterPos = { lat: v.lat, lon: v.lon };
+      const destKey = `${currentDest.lat.toFixed(4)},${currentDest.lon.toFixed(4)}`;
+
+      const walk = await cachedFetchWalk(userPos, scooterPos, `${v.id}|${userPos.lat.toFixed(4)},${userPos.lon.toFixed(4)}`);
+      const leg = await cachedComputeScooterLeg(scooterPos, currentDest, `${v.id}|${destKey}`);
+      const pricing = await getSystemPricing(v.systemId);
+
+      const walkMinutes = Math.round(walk.duration / 60);
+      const rideMinutes = Math.round(leg.route.duration / 60);
+      const totalMinutes = walkMinutes + rideMinutes;
+      const price = pricing && (pricing.unlock != null || pricing.perMin != null)
+        ? (pricing.unlock ?? 0) + (pricing.perMin ?? 0) * rideMinutes
+        : null;
+
+      compareCandidates.push({
+        vehicle: v, walk, leg, pricing, walkMinutes, rideMinutes, totalMinutes, price,
+        walkLatLngs: walk.geometry.coordinates.map(([lon,lat])=>[lat,lon]),
+        rideLatLngs: leg.route.geometry.coordinates.map(([lon,lat])=>[lat,lon])
+      });
+    }catch(err){
+      console.error('Vergleich fehlgeschlagen für Scooter', v.id, err);
+    }
+    completed++;
+    routeResult.innerHTML = `<div class="empty loading-pulse">Scooter werden verglichen … (${completed}/${candidates.length})</div>`;
+  }
+
+  // Einfacher Concurrency-Pool: startet immer neue Kandidaten nach, sobald
+  // einer der laufenden fertig ist, statt in starren Zweier-Batches zu warten.
+  const queue = [...candidates];
+  await Promise.all(
+    Array.from({ length: Math.min(COMPARE_CONCURRENCY, queue.length) }, async () => {
+      while(queue.length) await compareOne(queue.shift());
+    })
+  );
+
+  compareCandidates.sort((a,b)=> a.totalMinutes - b.totalMinutes);
+
+  if(!compareCandidates.length){
+    routeResult.innerHTML = '<div class="empty">Route konnte für keinen Scooter berechnet werden. Anderes Ziel versuchen.</div>';
+    return;
+  }
+  renderScooterComparison();
 }
 
-function drawRoute(route, dest, destLabel, usedProfile){
-  routeLayer.clearLayers();
-  const latlngs = route.geometry.coordinates.map(([lon,lat]) => [lat, lon]);
-  const line = L.polyline(latlngs, { color:'#4EA8FF', weight:5, opacity:.85 }).addTo(routeLayer);
-  destMarker = L.circleMarker([dest.lat, dest.lon], { radius:8, color:'#0A0E12', weight:2, fillColor:'#4EA8FF', fillOpacity:1 }).addTo(routeLayer);
-
-  map.flyToBounds(line.getBounds(), { ...computeMapSafePadding(0), duration:0.9 });
-
-  const distKm = (route.distance/1000).toFixed(1);
-  const minutes = Math.round(route.duration/60);
-  const stillHasBundesstrasse = usedProfile === 'cycling' && routeContainsBundesstrasse(route);
-
-  renderRouteResult({ distKm, minutes, destLabel, usedProfile, stillHasBundesstrasse, route, dest });
-}
-
-/* Preisschaetzung: nutzt den naechstgelegenen aktuell sichtbaren Scooter
-   als Grundlage (Entsperrgebuehr + Minutenpreis * geschaetzte Fahrzeit aus
-   der Route) - echte GBFS-Preisdaten, keine erfundenen Betraege. Ohne
-   verfuegbaren Scooter/Preis wird das auch so angezeigt. */
-async function renderRouteResult({ distKm, minutes, destLabel, usedProfile, stillHasBundesstrasse, route, dest }){
-  const profileLabel = usedProfile === 'walking'
-    ? 'Fußweg-Route (Rad-Route führte über eine Bundesstraße)'
-    : 'Rad-/Scooter-Route';
+function renderScooterComparison(){
+  const rows = compareCandidates.map(c=>{
+    const p = PROVIDER_META[c.vehicle.provider];
+    const isSelected = c.vehicle.id === selectedCompareId;
+    const priceLabel = c.price != null ? `ca. ${c.price.toFixed(2)} ${c.pricing.currency || '€'}` : 'nicht verfügbar';
+    return `
+      <div class="compare-row compare-select ${isSelected ? 'selected' : ''}" data-id="${c.vehicle.id}">
+        <div class="compare-top">
+          ${logoHtml(c.vehicle.provider, p.color)}
+          <div class="compare-name">Scooter #${shortScooterRef(c.vehicle.rawId)} · ${p.name}</div>
+          <div class="compare-check">${isSelected ? '✓' : ''}</div>
+        </div>
+        <div class="compare-stats">
+          <div><b>${metersLabel(c.walk.distance)}</b> · ca. ${c.walkMinutes} Min. zu Fuß</div>
+        </div>
+        <div class="compare-stats">
+          <div><b>ca. ${c.totalMinutes} Min.</b> gesamt</div>
+          <div><b>${priceLabel}</b></div>
+        </div>
+        ${c.leg.stillHasBundesstrasse ? '<div class="route-price-note" style="color:var(--err);">Scooter-Route enthält eine Bundesstraße.</div>' : ''}
+      </div>
+    `;
+  }).join('');
 
   routeResult.innerHTML = `
     <div class="route-result">
-      <div class="detail-stats">
-        <div class="detail-stat"><b>${distKm} km</b><span>Entfernung</span></div>
-        <div class="detail-stat"><b>ca. ${minutes} Min.</b><span>Fahrzeit</span></div>
-        <div class="detail-stat"><b id="routePriceValue">…</b><span>Preis</span></div>
-      </div>
-      <div class="route-price-note">${profileLabel}</div>
-      ${stillHasBundesstrasse ? '<div class="route-price-note" style="color:var(--err);">Enthält weiterhin einen Abschnitt über eine Bundesstraße – kein Fußweg als Alternative verfügbar.</div>' : ''}
-      <div class="route-price-note" id="routePriceNote">Preis wird geschätzt …</div>
-      <div class="detail-btn" id="startNavBtn" style="margin-top:14px; display:none;">Navigation starten</div>
+      <div class="section-label" style="margin-top:0;">Scooter vergleichen</div>
+      ${rows}
+      <div class="detail-btn" id="startNavBtn" style="margin-top:6px; opacity:.4; pointer-events:none;">Scooter auswählen, um zu starten</div>
       <div class="detail-btn fallback" id="clearRouteBtn" style="margin-top:8px;">Route löschen</div>
     </div>
   `;
+
+  routeResult.querySelectorAll('.compare-select').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      selectedCompareId = row.dataset.id;
+      renderScooterComparison();
+    });
+  });
+
   document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
     endNavigation();
     routeLayer.clearLayers();
     routeResult.innerHTML = '';
     routeSearchInput.value = '';
+    compareCandidates = [];
+    selectedCompareId = null;
   });
 
-  const nearest = [...vehiclesById.values()]
-    .filter(v => v.dist != null)
-    .sort((a,b) => a.dist - b.dist)[0];
-
-  const priceEl = document.getElementById('routePriceValue');
-  const noteEl = document.getElementById('routePriceNote');
-  if(!nearest){
-    priceEl.textContent = 'nicht verfügbar';
-    noteEl.textContent = 'Kein Scooter in der Nähe geladen, um einen Preis zu schätzen.';
-    return;
-  }
-
   const navBtn = document.getElementById('startNavBtn');
-  navBtn.style.display = 'block';
-  navBtn.addEventListener('click', ()=> startNavigation({ line: route.geometry.coordinates.map(([lon,lat])=>[lat,lon]), vehicleId: nearest.id, distKm, minutes }));
-
-  const pricing = await getSystemPricing(nearest.systemId);
-  if(!pricing || (pricing.unlock == null && pricing.perMin == null)){
-    priceEl.textContent = 'nicht verfügbar';
-    noteEl.textContent = `Für den nächstgelegenen Scooter (${PROVIDER_META[nearest.provider].name}) liegt keine Preisangabe vor.`;
-    return;
+  if(selectedCompareId){
+    navBtn.textContent = 'Navigation starten';
+    navBtn.style.opacity = '1';
+    navBtn.style.pointerEvents = 'auto';
+    navBtn.onclick = ()=>{
+      const chosen = compareCandidates.find(c=>c.vehicle.id===selectedCompareId);
+      if(chosen) startNavigation(chosen);
+    };
   }
-  const unlock = pricing.unlock ?? 0;
-  const perMin = pricing.perMin ?? 0;
-  const est = unlock + perMin * minutes;
-  priceEl.textContent = `ca. ${est.toFixed(2)} ${pricing.currency || '€'}`;
-  noteEl.textContent = `Voraussichtlicher Preis, geschätzt anhand des nächstgelegenen ${PROVIDER_META[nearest.provider].name}-Scooters (${metersLabel(nearest.dist)} entfernt) – kein garantierter Endpreis.`;
 }
+
+function drawComparisonRoute(chosen){
+  routeLayer.clearLayers();
+  const walkLine = L.polyline(chosen.walkLatLngs, { color:'#8FA0A8', weight:4, opacity:.8, dashArray:'2 10' }).addTo(routeLayer);
+  const rideLine = L.polyline(chosen.rideLatLngs, { color:'#4EA8FF', weight:5, opacity:.9 }).addTo(routeLayer);
+  L.circleMarker([currentDest.lat, currentDest.lon], { radius:8, color:'#0A0E12', weight:2, fillColor:'#4EA8FF', fillOpacity:1 }).addTo(routeLayer);
+  return L.featureGroup([walkLine, rideLine]).getBounds();
+}
+
+
 
 
 
@@ -1161,8 +2271,8 @@ function computeMapSafePadding(extraTopPx = 0){
   };
 }
 
-function showNavBanner(distKm, minutes){
-  navBannerText.textContent = `Navigation aktiv · ${distKm} km · ca. ${minutes} Min.`;
+function showNavBanner(detailText){
+  navBannerText.textContent = `Navigation aktiv · ${detailText}`;
   navBanner.classList.add('show');
 }
 function hideNavBanner(){ navBanner.classList.remove('show'); }
@@ -1173,22 +2283,70 @@ document.getElementById('navBannerEnd').addEventListener('click', ()=>{
   routeSearchInput.value = '';
 });
 
-function startNavigation({ vehicleId, distKm, minutes }){
+/* Anfangs-Peilung (Kompassrichtung) der Fahrtstrecke, damit die Karte sich
+   beim Navigationsstart in Fahrtrichtung eindrehen kann. Nimmt einen Punkt
+   etwas weiter vorne auf der Linie (nicht nur den direkten Nachbarpunkt),
+   damit die Richtung nicht durch GPS-/Wegpunkt-Rauschen verfaelscht wird. */
+function computeBearing(lat1, lon1, lat2, lon2){
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const φ1 = toRad(lat1), φ2 = toRad(lat2), Δλ = toRad(lon2 - lon1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+function initialHeadingOf(latlngs){
+  if(!latlngs || latlngs.length < 2) return null;
+  const start = latlngs[0];
+  const ahead = latlngs[Math.min(3, latlngs.length - 1)];
+  return computeBearing(start[0], start[1], ahead[0], ahead[1]);
+}
+
+const navInfoPanel = document.getElementById('navInfoPanel');
+
+/* Wird einmalig beim Start der Navigation berechnet (kein Live-Tracking der
+   Position waehrend der Fahrt - dafuer waere kontinuierliches GPS-Tracking
+   noetig, das diese App bisher nicht implementiert). */
+function renderNavInfoPanel(chosen){
+  const now = new Date();
+  const arrival = new Date(now.getTime() + chosen.totalMinutes * 60000);
+  const arrivalLabel = arrival.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  const totalKm = (chosen.walk.distance/1000 + chosen.leg.route.distance/1000).toFixed(1);
+
+  navInfoPanel.innerHTML = `
+    <div class="nav-info-stats">
+      <div class="nav-info-stat"><b>${chosen.totalMinutes} Min.</b><span>Fahrtdauer</span></div>
+      <div class="nav-info-stat"><b>${arrivalLabel}</b><span>Ankunft ca.</span></div>
+      <div class="nav-info-stat"><b>${totalKm} km</b><span>Strecke</span></div>
+    </div>
+    <div class="filter-note">Einmalig zu Beginn der Navigation berechnet – die App verfolgt deine Position während der Fahrt nicht live nach.</div>
+  `;
+}
+
+function startNavigation(chosen){
   navigationActive = true;
-  navScooterId = vehicleId;
+  navScooterId = chosen.vehicle.id;
+
+  const bounds = drawComparisonRoute(chosen);
+  const heading = initialHeadingOf(chosen.walkLatLngs) ?? initialHeadingOf(chosen.rideLatLngs);
 
   // Alles gemeinsam anstossen (gleicher Funktionsaufruf), damit es sich als
   // eine zusammenhaengende Bewegung anfuehlt: Marker-Fade/Highlight per CSS-
-  // Transition, Banner-Einblendung, Kartenanimation - alle praktisch
-  // gleichzeitig gestartet statt nacheinander.
+  // Transition, Panel-Wechsel, Banner-Einblendung, Kartenanimation - alle
+  // praktisch gleichzeitig gestartet statt nacheinander.
   applyNavigationVisibility();
-  closeRoute(); // Bottom-Sheet schliesst, Karte wird komplett sichtbar
-  showNavBanner(distKm, minutes);
+  closeRoute(); // Bottom-Sheet der Routenplanung schliesst, Karte wird sichtbar
+  scooterList.style.display = 'none';
+  navInfoPanel.style.display = 'block';
+  renderNavInfoPanel(chosen);
+  if(!sheet.classList.contains('expanded')) sheet.classList.add('expanded'); // Panel direkt sichtbar, nicht nur als Streifen
 
-  const bounds = routeLayer.getBounds();
-  if(bounds.isValid()){
-    map.flyToBounds(bounds, { ...computeMapSafePadding(56), duration:0.9, easeLinearity:0.25 });
-  }
+  const priceLabel = chosen.price != null ? `ca. ${chosen.price.toFixed(2)} ${chosen.pricing.currency || '€'}` : 'Preis nicht verfügbar';
+  showNavBanner(`${chosen.walkMinutes} Min. zu Fuß + ${chosen.rideMinutes} Min. Fahrt · ${priceLabel}`);
+
+  // Statt die komplette Route einzupassen, jetzt eng auf den Nutzer zoomen
+  // und in Fahrtrichtung eindrehen - wie bei aktiver Turn-by-Turn-Navigation.
+  map.flyTo([userPos.lat, userPos.lon], 18, { duration:0.9, easeLinearity:0.25 });
+  if(ROTATE_SUPPORTED && heading != null) map.setBearing(heading);
 }
 
 function endNavigation(){
@@ -1197,6 +2355,105 @@ function endNavigation(){
   navScooterId = null;
   applyNavigationVisibility();
   hideNavBanner();
+  navInfoPanel.style.display = 'none';
+  scooterList.style.display = '';
+  if(ROTATE_SUPPORTED) map.setBearing(0); // wieder nach Norden ausrichten
+}
+
+/* =====================================================================
+   GEOGRAFISCHE VORFILTERUNG DER SYSTEME
+
+   getRelevantSystems() liefert ALLE Systeme in ganz Baden-Wuerttemberg
+   (und ein paar Grenzstaedten), die zu einem erkannten Anbieter gehoeren -
+   das war bisher der Performance-Flaschenhals, weil bei jedem Laden auch
+   weit entfernte Systeme mit abgefragt wurden.
+
+   Hier wird jedes System anhand des in seiner system_id enthaltenen
+   Stadtnamens (z.B. "dott_tubingen" -> "tubingen") einer echten Koordinate
+   zugeordnet - zunaechst ueber eine feste Liste bekannter Staedte (kein
+   Netzwerk noetig), sonst per einmaligem Nominatim-Lookup mit dauerhaftem
+   Cache (localStorage, Stadt-Koordinaten aendern sich nicht). Danach
+   werden nur Systeme innerhalb eines grosszuegigen Umkreises um den
+   Nutzer tatsaechlich abgefragt.
+
+   WICHTIG, ehrlich gesagt: Das erweitert die Abdeckung auf ganz
+   Baden-Wuerttemberg (den tatsaechlichen Geltungsbereich von MobiData BW),
+   nicht auf ganz Deutschland. MobiData BW ist eine Landesplattform des
+   Landes Baden-Wuerttemberg - andere Bundeslaender sind darin nicht
+   enthalten. Fuer echte bundesweite Abdeckung braeuchte es zusaetzliche
+   Datenquellen je Region, die ich bisher nicht verifiziert habe.
+   ===================================================================== */
+
+// Bekannte Staedte, die in den bisher gesichteten System-IDs vorkommen -
+// deckt den Normalfall ohne Netzwerk-Roundtrip ab. Alles Weitere faellt auf
+// Nominatim zurueck (siehe geocodeCityToken).
+const KNOWN_CITY_COORDS = {
+  berlin:[52.5200,13.4050], hamburg:[53.5511,9.9937], koeln:[50.9375,6.9603],
+  muenchen:[48.1351,11.5820], stuttgart:[48.7758,9.1829], frankfurt:[50.1109,8.6821],
+  duesseldorf:[51.2277,6.7735], karlsruhe:[49.0069,8.4037], freiburg:[47.9990,7.8421],
+  mannheim:[49.4875,8.4660], heidelberg:[49.3988,8.6724], ulm:[48.4011,9.9876],
+  reutlingen:[48.4914,9.2043], tubingen:[48.5216,9.0576], tuebingen:[48.5216,9.0576],
+  heilbronn:[49.1427,9.2109], boblingen:[48.6850,9.0106], bueblingen:[48.6850,9.0106],
+  ludwigsburg:[48.8974,9.1916], friedrichshafen:[47.6559,9.4794], lindau:[47.5460,9.6857],
+  konstanz:[47.6603,9.1758], kaiserslautern:[49.4401,7.7491], saarbruecken:[49.2402,6.9969],
+  darmstadt:[49.8728,8.6512], basel:[47.5596,7.5886], bregenz:[47.5031,9.7471],
+  stgallen:[47.4245,9.3767], zuerich:[47.3769,8.5417], zurich:[47.3769,8.5417],
+  biel:[47.1368,7.2468], grenchen:[47.1936,7.3959], kloten:[47.4506,8.5836],
+  schaffhausen:[47.6979,8.6308], oberhausen:[51.4963,6.8638], opfikon:[47.4310,8.5730],
+  uster:[47.3469,8.7203], paris:[48.8566,2.3522], brussels:[50.8503,4.3517],
+  chalonsenchampagne:[48.9564,4.3634], sarreguemines:[49.1097,7.0645]
+};
+
+function normalizeCityKey(s){
+  return s.toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/[^a-z]/g, '');
+}
+
+function extractCityToken(systemId, provider){
+  return systemId.replace(new RegExp('^' + provider + '_'), '').replace(/_/g, ' ').trim();
+}
+
+const CITY_GEOCACHE_KEY = 'combine_city_geocache_v1';
+let cityGeocache = (()=>{ try{ return JSON.parse(localStorage.getItem(CITY_GEOCACHE_KEY) || '{}'); }catch(e){ return {}; } })();
+function saveCityGeocache(){ try{ localStorage.setItem(CITY_GEOCACHE_KEY, JSON.stringify(cityGeocache)); }catch(e){} }
+
+async function geocodeCityToken(token){
+  const words = token.split(/\s+/).map(normalizeCityKey).filter(Boolean);
+  for(const w of words){
+    if(KNOWN_CITY_COORDS[w]) return { lat: KNOWN_CITY_COORDS[w][0], lon: KNOWN_CITY_COORDS[w][1] };
+  }
+  const cacheKey = normalizeCityKey(token);
+  if(cityGeocache[cacheKey] !== undefined) return cityGeocache[cacheKey];
+
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(token)}&limit=1`, { headers: { 'Accept-Language':'de' } });
+    const results = await res.json();
+    const coord = results.length ? { lat:Number(results[0].lat), lon:Number(results[0].lon) } : null;
+    cityGeocache[cacheKey] = coord;
+    saveCityGeocache();
+    return coord;
+  }catch(err){
+    return null; // kein Cache-Eintrag bei Netzwerkfehler - naechstes Mal erneut versuchen
+  }
+}
+
+const NEARBY_SYSTEM_RADIUS_M = 200_000; // grosszuegiger Puffer oberhalb des max. Anzeige-Radius (150 km)
+
+async function getNearbySystems(){
+  const all = await getRelevantSystems();
+  if(!userPos) return all; // ohne Standort kein sinnvoller Filter moeglich
+
+  const withDistance = await Promise.all(all.map(async s=>{
+    const token = extractCityToken(s.id, s.provider);
+    const coord = await geocodeCityToken(token);
+    // Konnte die Stadt nicht zugeordnet werden: sicherheitshalber NICHT
+    // ausschliessen, statt ein System faelschlich zu verstecken.
+    const dist = coord ? haversineMeters(userPos.lat, userPos.lon, coord.lat, coord.lon) : null;
+    return { ...s, dist };
+  }));
+
+  return withDistance.filter(s => s.dist == null || s.dist <= NEARBY_SYSTEM_RADIUS_M);
 }
 
 async function getRelevantSystems(){
@@ -1340,6 +2597,7 @@ let markersById = new Map();
 
 /* ---------- Stadtname zum Standort (echtes Reverse-Geocoding via OSM/Nominatim) ---------- */
 let cityLookupToken = 0;
+let userCityName = null;
 async function lookupCityName(lat, lon){
   const token = ++cityLookupToken; // verwirft veraltete Antworten bei schnellem erneutem Orten
   cityLabel.textContent = 'Ort wird ermittelt …';
@@ -1352,8 +2610,9 @@ async function lookupCityName(lat, lon){
     const a = json.address || {};
     const city = a.city || a.town || a.village || a.municipality || a.county || null;
     cityLabel.textContent = city || '';
+    userCityName = city || null;
   }catch(err){
-    if(token === cityLookupToken) cityLabel.textContent = '';
+    if(token === cityLookupToken){ cityLabel.textContent = ''; userCityName = null; }
   }
 }
 
@@ -1410,7 +2669,7 @@ async function loadNearby(){
   setStatus('Suche läuft …');
   scooterList.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
 
-  const systems = await getRelevantSystems();
+  const systems = await getNearbySystems();
 
   const results = await Promise.all(systems.map(s => fetchSystemVehicles(s.id, s.provider)));
   let vehicles = results.flat();
@@ -1444,6 +2703,18 @@ function flyToUser(lat, lon){
 }
 
 let locating = false;
+
+/* Behebt den Fall, dass "Einkauf" schon geoeffnet wurde, BEVOR Standort/
+   Stadtname ermittelt waren - die Seite blieb sonst dauerhaft auf ihrem
+   allerersten (leeren) Zustand stehen, weil sie sich nicht von selbst
+   aktualisiert. Wird nach jeder erfolgreichen Standort-/Stadtermittlung
+   aufgerufen. */
+async function refreshShoppingMarketsIfVisible(){
+  if(!shoppingScreen.classList.contains('show')) return;
+  await ensureNearbyMarkets(true); // erneut versuchen, jetzt mit bekanntem Standort/Stadtname
+  if(shoppingView === 'home') renderShoppingHome();
+}
+
 function locateAndLoad(){
   if(!navigator.geolocation){
     setStatus('Standortzugriff nicht verfügbar.', 'err');
@@ -1459,7 +2730,12 @@ function locateAndLoad(){
     placeUserMarker(latitude, longitude);
     flyToUser(latitude, longitude);
     loadNearby();
-    lookupCityName(latitude, longitude);
+    // Nutzer hat aktiv seinen Standort aktualisiert -> eine per Städtesuche
+    // gesetzte Wunschstadt (falls vorhanden) verwerfen und wieder auf die
+    // Supermärkte in der tatsächlichen Umgebung umschalten.
+    marketsCityOverride = null;
+    marketsLoaded = false;
+    lookupCityName(latitude, longitude).then(refreshShoppingMarketsIfVisible);
   }, ()=>{
     locating = false;
     setStatus('Standortzugriff nicht erlaubt – tippe erneut auf das Standort-Symbol, sobald du ihn freigegeben hast.', 'err');
@@ -2478,11 +3754,12 @@ document.querySelectorAll('.navitem[data-tab]').forEach(item=>{
     const tab = item.dataset.tab;
 
     mapScreen.classList.toggle('hidden', tab !== 'map');
-    providersScreen.classList.toggle('show', tab === 'providers');
     foodScreen.classList.toggle('show', tab === 'food');
+    shoppingScreen.classList.toggle('show', tab === 'shopping');
     profileScreen.classList.toggle('show', tab === 'profile');
 
     if(tab === 'food'){ ensureFoodLoaded().then(()=> goFood('home')); }
+    if(tab === 'shopping') goShopping('home');
     if(tab === 'profile') goProfile('menu');
   });
 });
