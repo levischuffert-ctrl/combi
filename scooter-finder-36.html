@@ -1,0 +1,3752 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combine – Scooter finden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --bg:#10161B; --surface:#1B232A; --surface-2:#232D35; --ink:#F1EFE6; --ink-soft:#8FA0A8;
+    --line:#2C383F; --line-soft:#212A31; --accent:#FFB627; --accent-ink:#3E2900;
+    --ok:#57D38C; --err:#FF7A5C; --nav-bg:#0A0E12; --nav-ink:#F1EFE6;
+    --radius-lg:22px; --radius-md:14px; --radius-sm:9px;
+    --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif;
+    --ease-out:cubic-bezier(.16,1,.3,1); --ease-standard:cubic-bezier(.4,0,.2,1); --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  }
+  .phone.theme-light{
+    --bg:#EFF1EA; --surface:#FFFFFF; --surface-2:#E9EBE2; --ink:#14170F; --ink-soft:#565F55;
+    --line:#D6D9CC; --line-soft:#E4E6DC; --accent:#C2410C; --accent-ink:#FFFFFF;
+    --nav-bg:#161A15; --nav-ink:#F1EFE6; --ok:#1E8E4F; --err:#C0392B;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:#05070A; font-family:var(--font-body); color:var(--ink); }
+  .stage{ min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:28px 12px; }
+  .phone{ width:390px; max-width:100%; height:830px; background:var(--bg); color:var(--ink); border-radius:38px; overflow:hidden; position:relative; border:8px solid #000; box-shadow:0 30px 70px rgba(0,0,0,.55); display:flex; flex-direction:column; }
+  .notch{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:22px; background:#000; border-radius:0 0 14px 14px; z-index:500; }
+
+  .topbar{ padding:34px 16px 10px; background:var(--bg); position:relative; z-index:20; }
+  .topbar-row{ display:flex; align-items:center; gap:10px; }
+  .brand{ font-family:var(--font-display); font-weight:700; font-size:20px; letter-spacing:-.02em; color:var(--ink); }
+  .brand span{ color:var(--accent); }
+  .city-label{ font-family:var(--font-display); font-size:13.5px; font-weight:600; color:var(--ink); margin-top:6px; min-height:17px; }
+  .map-fab{
+    position:absolute; right:12px; width:42px; height:42px; border-radius:50%;
+    background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 6px 16px rgba(0,0,0,.35); z-index:12;
+    transition:opacity .25s var(--ease-standard), transform .18s var(--ease-spring), background .2s var(--ease-standard), box-shadow .2s var(--ease-standard);
+  }
+  .map-fab:hover{ box-shadow:0 8px 20px rgba(0,0,0,.45); }
+  .map-fab:active{ transform:scale(.88); }
+  #watchBtn{ bottom:254px; }
+  #routeBtn{ bottom:204px; }
+  #filterBtn{ bottom:154px; }
+  #locateBtn{ bottom:104px; }
+  #locateIcon{ transition:transform .2s var(--ease-standard); }
+  .map-fab.active{ background:var(--accent); border-color:var(--accent); }
+  .map-fab.active svg{ stroke:var(--accent-ink); }
+  .mapscreen.sheet-expanded .map-fab{ opacity:0; transform:scale(.7); pointer-events:none; }
+  .status{ margin-top:10px; font-size:11.5px; color:var(--ink-soft); min-height:14px; font-weight:500; }
+  .status.live{ color:var(--ok); }
+  .status.err{ color:var(--err); }
+
+  .mapwrap{ position:absolute; top:10px; left:14px; right:14px; bottom:10px; border-radius:var(--radius-lg); overflow:hidden; border:1px solid var(--line); }
+  #map{ position:absolute; inset:0; filter:saturate(.85) brightness(.95); }
+  .leaflet-popup-content-wrapper{ border-radius:14px; font-family:var(--font-body); background:var(--surface); color:var(--ink); }
+  .leaflet-popup-tip{ background:var(--surface); }
+  .leaflet-popup-content b{ font-family:var(--font-display); }
+  .pop-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .popbtn{ display:inline-block; margin-top:8px; padding:9px 13px; background:var(--accent); color:var(--accent-ink); border-radius:9px; font-family:var(--font-display); font-weight:700; font-size:12.5px; text-decoration:none; }
+
+  .sheet{
+    position:absolute; left:14px; right:14px; bottom:10px; z-index:15;
+    height:460px; display:flex; flex-direction:column;
+    background:var(--surface); border-radius:22px; box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    border:1px solid var(--line);
+    transform:translateY(376px); /* collapsed: nur Grabber + Kopfzeile sichtbar */
+    transition:transform .42s cubic-bezier(.22,.9,.32,1);
+    touch-action:none;
+  }
+  .sheet.expanded{ transform:translateY(0); }
+  .sheet.dragging{ transition:none; }
+  .sheet-handle{ padding:12px 18px 8px; cursor:grab; flex:0 0 auto; }
+  .sheet-handle:active{ cursor:grabbing; }
+  .grabber{ width:38px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 10px; transition:background .2s var(--ease-standard), width .2s var(--ease-standard); }
+  .sheet-handle:active .grabber{ background:var(--accent); width:46px; }
+  .sheet-summary{ font-size:13px; font-weight:600; text-align:center; }
+  .sheet-summary span{ font-weight:500; color:var(--ink-soft); }
+  .list{ flex:1; min-height:0; overflow-y:auto; padding:0 18px 14px; }
+  .row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line-soft); cursor:pointer; border-radius:12px; transition:background .15s var(--ease-standard); }
+  .row:last-child{ border-bottom:none; }
+  .row:hover{ background:var(--surface-2); }
+  .row:active{ background:var(--surface-2); transform:scale(.99); }
+  .logo{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .logo svg{ width:18px; height:18px; }
+  .rowinfo{ flex:1; min-width:0; }
+  .rowinfo .name{ font-size:13px; font-weight:600; }
+  .rowinfo .meta{ font-size:11.5px; color:var(--ink-soft); }
+  .goto{ padding:7px 11px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-size:11.5px; font-weight:600; color:var(--ink); text-decoration:none; transition:background .15s var(--ease-standard), transform .15s var(--ease-spring); }
+  .goto:hover{ background:var(--line-soft); }
+  .goto:active{ transform:scale(.92); }
+  .chevron{ color:var(--ink-soft); flex:0 0 auto; }
+  .empty{ font-size:12.5px; color:var(--ink-soft); padding:14px 4px; text-align:center; }
+  @keyframes softPulse{ 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+  .loading-pulse{ animation:softPulse 1.3s ease-in-out infinite; }
+
+  .user-marker{ width:22px; height:22px; position:relative; }
+  .user-marker .ring{ position:absolute; inset:-9px; border-radius:50%; background:#4EA8FF; opacity:.28; animation:pulse 2s ease-out infinite; }
+  .user-marker .core{ position:absolute; inset:5px; border-radius:50%; background:#4EA8FF; border:3px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
+  @keyframes pulse{ 0%{ transform:scale(.6); opacity:.5; } 100%{ transform:scale(1.6); opacity:0; } }
+
+  .map-pin{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.45); cursor:pointer; transition:opacity .3s ease, transform .3s var(--ease-spring), box-shadow .3s var(--ease-standard); }
+  .map-pin svg{ width:16px; height:16px; }
+  .nav-hidden .map-pin{ opacity:0; pointer-events:none; }
+  .nav-selected{ z-index:1000 !important; }
+  .nav-selected .map-pin{ box-shadow:0 0 0 4px var(--accent), 0 4px 14px rgba(0,0,0,.5); transform:scale(1.07); }
+
+  .nav-banner{
+    position:absolute; top:10px; left:10px; right:10px; z-index:16;
+    background:var(--surface); border:1px solid var(--accent); border-radius:14px;
+    padding:11px 12px; display:flex; align-items:center; gap:10px;
+    box-shadow:0 8px 20px rgba(0,0,0,.4);
+    opacity:0; transform:translateY(-10px); pointer-events:none;
+    transition:opacity .25s var(--ease-out), transform .25s var(--ease-out);
+  }
+  .nav-banner.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  .nav-banner-text{ flex:1; font-size:12.5px; font-weight:600; }
+  .nav-banner-end{ font-family:var(--font-display); font-weight:700; font-size:12px; color:var(--accent); cursor:pointer; padding:4px 8px; }
+
+  @keyframes screenIn{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  .mapscreen{ flex:1; min-height:0; position:relative; animation:screenIn .32s var(--ease-out); }
+  .mapscreen.hidden{ display:none; }
+
+  .providersscreen{ flex:1; min-height:0; display:none; flex-direction:column; padding:16px 18px 0; overflow-y:auto; }
+  .providersscreen.show{ display:flex; animation:screenIn .32s var(--ease-out); }
+  .providers-head{ margin-bottom:6px; }
+  .providers-title{ font-family:var(--font-display); font-size:19px; font-weight:700; }
+  .providers-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:4px; line-height:1.5; }
+  #providerList .row{ cursor:default; padding:12px 4px; }
+  #providerList .row:hover, #providerList .row:active{ background:transparent; transform:none; }
+  #providerList .rowinfo .meta{ margin-top:1px; }
+
+  .toggle{ position:relative; width:44px; height:26px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); flex:0 0 auto; cursor:pointer; transition:background .25s var(--ease-standard), border-color .25s var(--ease-standard); }
+  .toggle:active .knob{ width:24px; }
+  .toggle .knob{ position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--ink-soft); transition:transform .3s var(--ease-spring), background .25s var(--ease-standard), width .15s var(--ease-standard); }
+  .toggle.on{ background:var(--accent); border-color:var(--accent); }
+  .toggle.on .knob{ transform:translateX(18px); background:var(--accent-ink); }
+  .toggle.on:active .knob{ transform:translateX(14px); }
+
+  .nav{ background:var(--nav-bg); display:flex; padding:10px 6px 14px; z-index:20; border-top:1px solid #000; }
+  .navitem{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; color:#5B666D; cursor:pointer; position:relative; padding-top:4px; transition:color .2s var(--ease-standard); }
+  .navitem svg{ transition:transform .18s var(--ease-spring); }
+  .navitem:active svg{ transform:scale(.82); }
+  .navitem.active{ color:var(--accent); }
+  .navitem.active::before{ content:''; position:absolute; top:-4px; width:16px; height:3px; border-radius:3px; background:var(--accent); animation:navdot .25s var(--ease-spring); }
+  @keyframes navdot{ from{ width:0; opacity:0; } to{ width:16px; opacity:1; } }
+  .navitem svg{ width:20px; height:20px; }
+  .navitem span{ font-size:10px; font-weight:600; }
+
+  /* ---------- Scooter-Detailansicht ---------- */
+  .overlay{ position:absolute; inset:0; background:rgba(5,7,10,.6); z-index:200; display:flex; align-items:flex-end; opacity:0; pointer-events:none; transition:opacity .28s var(--ease-standard), backdrop-filter .28s var(--ease-standard); }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .detail{ width:100%; background:var(--surface); border-radius:26px 26px 0 0; padding:18px 20px 24px; transform:translateY(28px); transition:transform .38s var(--ease-out); border-top:1px solid var(--line); }
+  .overlay.show .detail{ transform:translateY(0); }
+  .detail-top{ display:flex; align-items:center; gap:12px; }
+  .detail-title{ font-family:var(--font-display); font-size:16.5px; font-weight:600; }
+  .detail-sub{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .detail-close{ margin-left:auto; width:30px; height:30px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; transition:background .15s var(--ease-standard), transform .15s var(--ease-spring); }
+  .detail-close:hover{ background:var(--line-soft); }
+  .detail-close:active{ transform:scale(.85) rotate(90deg); }
+  .detail-stats{ display:flex; gap:8px; margin:16px 0; }
+  .detail-stat{ flex:1; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px; text-align:center; }
+  .detail-stat b{ display:block; font-family:var(--font-display); font-size:15px; }
+  .detail-stat span{ font-size:10.5px; color:var(--ink-soft); }
+  .detail-btn{ width:100%; padding:15px; border:none; border-radius:var(--radius-md); background:var(--accent); color:var(--accent-ink); font-family:var(--font-display); font-weight:700; font-size:14.5px; text-align:center; display:block; text-decoration:none; cursor:pointer; box-shadow:0 6px 16px rgba(255,182,39,.25); transition:transform .15s var(--ease-spring), box-shadow .2s var(--ease-standard), background .2s var(--ease-standard); }
+  .detail-btn:hover{ box-shadow:0 8px 20px rgba(255,182,39,.35); }
+  .detail-btn:active{ transform:scale(.97); box-shadow:0 3px 10px rgba(255,182,39,.25); }
+  .detail-btn.fallback{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); box-shadow:none; }
+  .detail-note{ font-size:11px; color:var(--ink-soft); text-align:center; margin-top:10px; line-height:1.5; }
+
+  /* ---------- Filter-Overlay ---------- */
+  .filter-section{ margin:18px 0; }
+  .filter-label{ font-family:var(--font-display); font-size:13px; font-weight:600; margin-bottom:8px; display:flex; justify-content:space-between; }
+  .filter-label span{ color:var(--accent); font-weight:700; }
+  #filterProviderList .row{ cursor:default; padding:8px 2px; }
+  #filterProviderList .row:hover, #filterProviderList .row:active{ background:transparent; transform:none; }
+  .filter-slider{ width:100%; accent-color:var(--accent); }
+  .filter-check{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:8px; }
+  .filter-check input{ accent-color:var(--accent); width:16px; height:16px; }
+  .filter-check span{ display:flex; gap:6px; align-items:baseline; }
+  .filter-check span span{ color:var(--accent); font-weight:700; }
+  .filter-note{ font-size:10.5px; color:var(--ink-soft); line-height:1.5; margin-top:6px; }
+  .nav-info-panel{ padding-top:4px; }
+  .nav-info-stats{ display:flex; gap:8px; margin-bottom:4px; }
+  .nav-info-stat{ flex:1; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:14px 10px; text-align:center; }
+  .nav-info-stat b{ display:block; font-family:var(--font-display); font-size:19px; font-weight:700; }
+  .nav-info-stat span{ font-size:11px; color:var(--ink-soft); }
+
+  /* ---------- Routenplanung ---------- */
+  #routeSuggestions .row{ padding:10px 4px; }
+  #citySearchResults .row{ padding:10px 4px; cursor:pointer; }
+  .route-result{ margin-top:16px; }
+  .route-price-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
+
+  /* ---------- Profil / Konto / Einstellungen ---------- */
+  .profile-head{ display:flex; align-items:center; gap:10px; position:relative; }
+  .section-label{ font-family:var(--font-display); font-size:11.5px; font-weight:700; letter-spacing:.02em; color:var(--ink-soft); margin:18px 4px 6px; text-transform:uppercase; }
+  .section-label:first-child{ margin-top:2px; }
+  .profile-card{ display:flex; align-items:center; gap:14px; padding:16px 4px 20px; border-bottom:1px solid var(--line-soft); margin-bottom:4px; }
+  .profile-avatar{ width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:20px; flex:0 0 auto; }
+  .profile-card-name{ font-family:var(--font-display); font-size:16px; font-weight:700; }
+  .profile-card-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .field-input{ width:100%; padding:13px 14px; border-radius:var(--radius-md); border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-family:var(--font-body); font-size:14px; outline:none; transition:border-color .15s var(--ease-standard), box-shadow .15s var(--ease-standard); }
+  .field-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,182,39,.18); }
+  .field-label{ font-size:11.5px; color:var(--ink-soft); font-weight:600; margin:2px 2px 8px; }
+  .segmented{ display:flex; background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:3px; gap:3px; }
+  .segmented-opt{ flex:1; text-align:center; padding:9px 4px; border-radius:9px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; transition:background .2s var(--ease-standard), color .2s var(--ease-standard); }
+  .segmented-opt.on{ background:var(--accent); color:var(--accent-ink); }
+  .info-row{ padding:12px 4px; border-bottom:1px solid var(--line-soft); }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .info-label{ font-size:11.5px; color:var(--ink-soft); font-weight:600; }
+  .info-row .info-value{ font-size:13.5px; margin-top:2px; line-height:1.5; }
+  .status-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
+
+  /* ---------- Essen / Food-Vergleich ---------- */
+  .food-search{ display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:11px 14px; margin:2px 2px 14px; }
+
+  /* ---------- Einkauf: Markt-Chips, Angebots-Grid, Dropdown-Menü ---------- */
+  .market-chip{ flex:0 0 auto; display:flex; align-items:center; gap:7px; padding:6px 12px 6px 6px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:12px; font-weight:600; cursor:pointer; opacity:.55; transition:opacity .15s var(--ease-standard), border-color .15s var(--ease-standard); white-space:nowrap; }
+  .market-chip.on{ opacity:1; border-color:var(--accent); }
+  .market-chip .logo{ flex:0 0 auto; }
+  .deals-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .deal-card{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:10px; }
+  .deal-thumb{ width:100%; aspect-ratio:1; border-radius:10px; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:26px; overflow:hidden; margin-bottom:8px; }
+  .deal-thumb img{ width:100%; height:100%; object-fit:contain; }
+  .deal-name{ font-size:12px; font-weight:600; line-height:1.3; }
+  .deal-price{ font-family:var(--font-display); font-weight:700; font-size:14px; margin-top:4px; color:var(--accent); }
+  .deal-meta{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+  .dropdown-menu{ position:absolute; top:44px; right:16px; z-index:50; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 26px rgba(0,0,0,.4); overflow:hidden; min-width:200px; animation:screenIn .18s var(--ease-out); }
+  .dropdown-item{ padding:13px 16px; font-size:13px; font-weight:600; cursor:pointer; border-bottom:1px solid var(--line-soft); transition:background .15s var(--ease-standard); }
+  .dropdown-item:last-child{ border-bottom:none; }
+  .dropdown-item:hover{ background:var(--surface-2); }
+  .food-search input{ border:none; outline:none; background:transparent; font-family:var(--font-body); font-size:14px; width:100%; color:var(--ink); }
+  .food-search input::placeholder{ color:var(--ink-soft); }
+  .food-lead{ font-family:var(--font-display); font-size:16px; font-weight:700; margin:4px 2px 10px; }
+  .cat-scroll{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 16px; scrollbar-width:none; }
+  .cat-scroll::-webkit-scrollbar{ display:none; }
+  .cat-chip{ flex:0 0 auto; padding:9px 14px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:12.5px; font-weight:600; cursor:pointer; transition:background .15s var(--ease-standard), color .15s var(--ease-standard); white-space:nowrap; }
+  .cat-chip.on{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+
+  .disclaimer-box{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-md); padding:12px 14px; font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin:4px 2px 16px; }
+  .disclaimer-box b{ color:var(--ink); }
+
+  .provider-status-row{ display:flex; gap:6px; flex-wrap:wrap; margin:0 2px 14px; }
+  .provider-status-chip{ display:flex; align-items:center; gap:5px; padding:6px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); font-size:11px; font-weight:600; }
+
+  .rest-card{ display:flex; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line-soft); cursor:pointer; border-radius:12px; transition:background .15s var(--ease-standard); }
+  .rest-card:last-child{ border-bottom:none; }
+  .rest-card:hover{ background:var(--surface-2); }
+  .rest-card:active{ background:var(--surface-2); transform:scale(.99); }
+  .rest-thumb{ width:64px; height:64px; border-radius:14px; flex:0 0 auto; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:22px; overflow:hidden; }
+  .rest-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .rest-info{ flex:1; min-width:0; }
+  .rest-info .rest-name{ font-family:var(--font-display); font-size:14.5px; font-weight:700; }
+  .rest-info .rest-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .rest-info .rest-meta2{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .rest-providers{ display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; }
+  .rest-tag{ font-size:10.5px; font-weight:700; padding:3px 7px; border-radius:6px; color:#fff; }
+  .offer-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:6px; background:var(--ok); color:#08210F; margin-top:6px; }
+
+  .compare-row{ border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; margin-bottom:10px; transition:border-color .2s var(--ease-standard), background .2s var(--ease-standard); }
+  .compare-top{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .compare-name{ font-family:var(--font-display); font-weight:700; font-size:14px; flex:1; }
+  .compare-stats{ display:flex; gap:14px; font-size:12.5px; color:var(--ink-soft); margin-bottom:12px; }
+  .compare-select{ cursor:pointer; }
+  .compare-select:active{ transform:scale(.99); }
+  .compare-check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--accent-ink); flex:0 0 auto; transition:background .2s var(--ease-standard), border-color .2s var(--ease-standard); }
+  .compare-row.selected{ border-color:var(--accent); background:var(--surface-2); }
+  .compare-row.selected .compare-check{ background:var(--accent); border-color:var(--accent); }
+  .compare-stats b{ color:var(--ink); font-weight:600; }
+
+  .menu-item-row{ padding:10px 4px; border-bottom:1px solid var(--line-soft); }
+  .menu-item-row:last-child{ border-bottom:none; }
+  .menu-item-top{ display:flex; justify-content:space-between; gap:10px; }
+  .menu-item-name{ font-size:13.5px; font-weight:600; }
+  .menu-item-desc{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .menu-item-price{ font-family:var(--font-display); font-size:13px; font-weight:700; white-space:nowrap; }
+  .menu-item-price .orig{ text-decoration:line-through; color:var(--ink-soft); font-weight:500; font-size:11px; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="notch"></div>
+
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="brand">Combin<span>e</span></div>
+      </div>
+      <div class="city-label" id="cityLabel"></div>
+      <div class="status" id="statusLine">Ermittle deinen Standort …</div>
+    </div>
+
+    <div class="mapscreen" id="mapScreen">
+      <div class="mapwrap">
+        <div id="map"></div>
+        <div class="nav-banner" id="navBanner">
+          <div class="nav-banner-text" id="navBannerText"></div>
+          <div class="nav-banner-end" id="navBannerEnd">Beenden</div>
+        </div>
+        <div class="map-fab" id="watchBtn" title="Scooter Watch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6z"/><path d="M9 18a3 3 0 0 0 6 0"/></svg>
+        </div>
+        <div class="map-fab" id="routeBtn" title="Route planen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V13a4 4 0 0 1 4-4h4a4 4 0 0 0 4-4"/></svg>
+        </div>
+        <div class="map-fab" id="filterBtn" title="Filter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        </div>
+        <div class="map-fab" id="locateBtn" title="Standort / Nordausrichtung">
+          <svg id="locateIcon" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </div>
+      </div>
+
+      <div class="sheet" id="sheet">
+        <div class="sheet-handle" id="sheetHandle">
+          <div class="grabber"></div>
+          <div class="sheet-summary" id="sheetSummary">Scooter werden geladen…</div>
+        </div>
+        <div class="list" id="scooterList"><div class="empty">Lade Standorte …</div></div>
+        <div class="list nav-info-panel" id="navInfoPanel" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="providersscreen" id="providersScreen">
+      <div class="providers-head">
+        <div class="providers-title">Anbieter</div>
+        <div class="providers-sub">Wähle aus, welche Scooter-Anbieter auf der Karte angezeigt werden.</div>
+      </div>
+      <div class="list" id="providerList"></div>
+    </div>
+
+    <div class="providersscreen" id="shoppingScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="shoppingBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="shoppingTitle">Einkauf</div>
+          <div class="providers-sub" id="shoppingSub">Preise mehrerer Quellen vergleichen.</div>
+        </div>
+        <!-- DEV-ONLY: Backend-Erreichbarkeits-Anzeige fuer die Entwicklung.
+             Vor dem Live-Gang entfernen (siehe DEV_SHOW_BACKEND_STATUS im Script). -->
+        <div class="detail-close" id="backendStatusBadge" title="Backend nicht erreichbar (DEV)" style="display:none; background:var(--err); color:#fff; font-weight:800; font-size:15px;">!</div>
+        <div class="detail-close" id="citySearchBtn" title="Stadt suchen">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        </div>
+        <div class="detail-close" id="shoppingMenuBtn" style="display:none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ink)"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </div>
+      </div>
+      <div id="citySearchPanel" style="display:none; padding:0 2px 12px;">
+        <div class="food-search" style="margin:8px 2px 0;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input type="text" id="citySearchInput" placeholder="Stadt suchen, z.B. Stuttgart">
+        </div>
+        <div id="citySearchResults"></div>
+      </div>
+      <div class="list" id="shoppingContent" style="padding:0 2px;"></div>
+    </div>
+
+    <div class="providersscreen" id="foodScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="foodBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="foodTitle">Essen</div>
+          <div class="providers-sub" id="foodSub">Restaurants mehrerer Lieferdienste vergleichen.</div>
+        </div>
+      </div>
+      <div class="list" id="foodContent" style="padding:0 2px;"></div>
+    </div>
+
+    <div class="providersscreen" id="profileScreen">
+      <div class="providers-head profile-head">
+        <div class="detail-close" id="profileBack" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="providers-title" id="profileTitle">Profil</div>
+          <div class="providers-sub" id="profileSub">Dein lokales Profil auf diesem Gerät.</div>
+        </div>
+      </div>
+      <div class="list" id="profileContent" style="padding:0 2px;"></div>
+    </div>
+
+    <div class="nav">
+      <div class="navitem active" data-tab="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-2V4l6 2 6-2 6 2v14l-6-2-6 2z"/><path d="M9 6v14M15 4v14"/></svg><span>Karte</span></div>
+      <div class="navitem" data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a2 2 0 002 2h0a2 2 0 002-2V3M8 12v9M17 3c-1.7 0-3 2.2-3 5s1.3 5 3 5v9"/></svg><span>Essen</span></div>
+      <div class="navitem" data-tab="shopping"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6L4 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/></svg><span>Einkauf</span></div>
+      <div class="navitem" data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span>Profil</span></div>
+    </div>
+
+    <div class="overlay" id="watchOverlay">
+      <div class="detail" id="watchBody"></div>
+    </div>
+
+    <div class="overlay" id="routeOverlay">
+      <div class="detail" id="routeBody">
+        <div class="detail-top">
+          <div style="flex:1;">
+            <div class="detail-title">Route</div>
+            <div class="detail-sub">Ziel eingeben – Route wird ab deinem Standort berechnet</div>
+          </div>
+          <div class="detail-close" id="routeClose">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </div>
+        </div>
+        <div class="food-search" style="margin-top:14px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input type="text" id="routeSearchInput" placeholder="Adresse, Ort oder Sehenswürdigkeit">
+        </div>
+        <div id="routeSuggestions"></div>
+        <div id="routeResult"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="detailOverlay">
+      <div class="detail" id="detailBody"></div>
+    </div>
+
+    <div class="overlay" id="filterOverlay">
+      <div class="detail" id="filterBody">
+        <div class="detail-top">
+          <div>
+            <div class="detail-title">Filter</div>
+            <div class="detail-sub">Anbieter, Umkreis und Preis für die Kartenansicht</div>
+          </div>
+          <div class="detail-close" id="filterClose">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-label">Anbieter</div>
+          <div id="filterProviderList"></div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-label">Anzeige-Radius <span id="radiusValue"></span></div>
+          <input type="range" id="radiusSlider" class="filter-slider" min="1" max="150" step="1">
+        </div>
+
+        <div class="filter-section">
+          <label class="filter-check">
+            <input type="checkbox" id="priceFilterToggle">
+            <span>Maximalpreis pro Minute <span id="priceValue"></span></span>
+          </label>
+          <input type="range" id="priceSlider" class="filter-slider" min="0.10" max="1.00" step="0.05" disabled>
+          <div class="filter-note">Nur Fahrzeuge, für die uns eine Anbieter-Preisangabe vorliegt, werden nach Preis gefiltert – Fahrzeuge ohne bekannten Preis bleiben sichtbar.</div>
+        </div>
+
+        <div class="detail-btn" id="filterDone">Fertig</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Live-Datenquelle: MobiData BW - die offene Mobilitaetsdatenplattform des
+  Landes Baden-Wuerttemberg (api.mobidata-bw.de). Sie buendelt die offenen
+  GBFS-Feeds aller Sharing-Anbieter (u.a. Dott, Bolt, Voi, Lime) ohne
+  Zugangsdaten. Wir laden das zentrale Manifest, filtern die Systeme der
+  vier gewuenschten Anbieter und fragen deren Fahrzeugstandorte live ab.
+  Quelle: https://api.mobidata-bw.de/
+
+  Hinweis zu den Badges: Es werden bewusst KEINE echten Markenlogos
+  verwendet (geschuetzte Markenzeichen der Anbieter), sondern eigens
+  gestaltete Monogramm-Icons in den jeweiligen Markenfarben.
+*/
+
+const MANIFEST_URL = 'https://api.mobidata-bw.de/sharing/gbfs/v3/manifest.json';
+function feedUrl(systemId, feedName){ return `https://api.mobidata-bw.de/sharing/gbfs/v2/${systemId}/${feedName}`; }
+
+const PROVIDER_META = {
+  dott: { name: "Dott", color: "#000000", homepage: "https://ridedott.com" },
+  bolt: { name: "Bolt", color: "#34D186", homepage: "https://bolt.eu/en/rides/" },
+  voi:  { name: "Voi",  color: "#0A5C48", homepage: "https://www.voiapp.io" },
+  lime: { name: "Lime", color: "#00B14F", homepage: "https://li.me" },
+  zeus: { name: "Zeus", color: "#3B6EF6", homepage: "https://zeusscooters.com/" },
+  yoio: { name: "Yoio", color: "#FF8A3D", homepage: "https://apps.apple.com/app/id1500759294" },
+  hopp: { name: "Hopp", color: "#7C5CFC", homepage: "https://hopp.bike/" }
+};
+
+const LOGO_SVG = {
+  dott: '<svg viewBox="0 0 24 24" fill="#fff"><circle cx="7" cy="12" r="3.2"/><circle cx="17" cy="12" r="3.2"/></svg>',
+  lime: '<svg viewBox="0 0 24 24" fill="none" stroke="#0B2E0F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19C5 10 11 5 19 5c0 8-5 14-14 14z"/><path d="M8 16C10 12 13 9 17 7"/></svg>',
+  voi:  '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 12 7-12"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="#0B2E0F"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+  zeus: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">Z</text></svg>',
+  yoio: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">Y</text></svg>',
+  hopp: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">H</text></svg>',
+  wolt: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">W</text></svg>',
+  ubereats: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">U</text></svg>',
+  lieferando: '<svg viewBox="0 0 24 24"><text x="12" y="16.5" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="13" fill="#fff" text-anchor="middle">L</text></svg>'
+};
+
+function logoHtml(key, color){
+  return `<div class="logo" style="background:${color}">${LOGO_SVG[key]}</div>`;
+}
+
+function providerFromSystemId(id){
+  if(id.startsWith('dott_')) return 'dott';
+  if(id.startsWith('bolt_')) return 'bolt';
+  if(id.startsWith('voi_'))  return 'voi';
+  if(id.startsWith('lime_')) return 'lime';
+  if(id.startsWith('zeus_')) return 'zeus';
+  if(id.startsWith('yoio_')) return 'yoio';
+  if(id.startsWith('hopp_')) return 'hopp';
+  return null;
+}
+
+function haversineMeters(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distLabel(v){
+  if(v.dist == null) return null;
+  return v.dist < 950 ? Math.round(v.dist/10)*10 + ' m' : (v.dist/1000).toFixed(1) + ' km';
+}
+
+let maxRadiusM = 6000;
+let maxPricePerMin = null; // null = kein Preislimit aktiv
+let userPos = null;
+let systemsCache = null;
+let lastNearbyVehicles = [];
+let activeProviders = new Set(Object.keys(PROVIDER_META));
+
+const statusLine = document.getElementById('statusLine');
+const cityLabel = document.getElementById('cityLabel');
+const scooterList = document.getElementById('scooterList');
+const mapScreen = document.getElementById('mapScreen');
+const providersScreen = document.getElementById('providersScreen');
+const providerList = document.getElementById('providerList');
+const foodScreen = document.getElementById('foodScreen');
+const foodContent = document.getElementById('foodContent');
+const foodTitle = document.getElementById('foodTitle');
+const foodSub = document.getElementById('foodSub');
+const foodBack = document.getElementById('foodBack');
+const shoppingScreen = document.getElementById('shoppingScreen');
+const shoppingContent = document.getElementById('shoppingContent');
+const shoppingTitle = document.getElementById('shoppingTitle');
+const shoppingSub = document.getElementById('shoppingSub');
+const shoppingBack = document.getElementById('shoppingBack');
+const profileScreen = document.getElementById('profileScreen');
+const profileContent = document.getElementById('profileContent');
+const profileTitle = document.getElementById('profileTitle');
+const profileSub = document.getElementById('profileSub');
+const profileBack = document.getElementById('profileBack');
+const sheet = document.getElementById('sheet');
+const sheetHandle = document.getElementById('sheetHandle');
+const sheetSummary = document.getElementById('sheetSummary');
+const filterBtn = document.getElementById('filterBtn');
+const filterOverlay = document.getElementById('filterOverlay');
+const filterProviderList = document.getElementById('filterProviderList');
+const radiusSlider = document.getElementById('radiusSlider');
+const radiusValue = document.getElementById('radiusValue');
+const priceFilterToggle = document.getElementById('priceFilterToggle');
+const priceSlider = document.getElementById('priceSlider');
+const priceValue = document.getElementById('priceValue');
+
+function setStatus(text, cls){
+  statusLine.textContent = text;
+  statusLine.className = 'status' + (cls ? ' ' + cls : '');
+  sheetSummary.textContent = text;
+}
+
+/* ---------- Karte ---------- */
+// leaflet-rotate patcht L.Map, WENN das externe Script erfolgreich geladen
+// hat - deshalb hier per Feature-Detection pruefen, statt blind davon
+// auszugehen. Laedt das Plugin nicht, verhaelt sich die Karte exakt wie
+// vorher (rotate:false).
+const ROTATE_SUPPORTED = typeof L.Map.prototype.setBearing === 'function';
+const map = L.map('map', {
+  zoomControl:false,
+  rotate: ROTATE_SUPPORTED,
+  touchRotate: ROTATE_SUPPORTED,   // Zwei-Finger-Drehgeste auf Touch-Geraeten
+  shiftKeyRotate: ROTATE_SUPPORTED, // Umschalt+Ziehen zum Testen am Desktop
+  rotateControl: false              // eigener Button statt Plugin-Default-UI
+}).setView([48.5216, 9.0576], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap-Mitwirkende', maxZoom: 19
+}).addTo(map);
+L.control.zoom({ position:'topright' }).addTo(map);
+
+const locateIcon = document.getElementById('locateIcon');
+if(ROTATE_SUPPORTED){
+  // Icon zeigt immer visuell nach Norden und signalisiert damit, ob die
+  // Karte gerade gedreht ist.
+  map.on('rotate', ()=>{
+    locateIcon.style.transform = `rotate(${-map.getBearing()}deg)`;
+    document.getElementById('locateBtn').classList.toggle('active', Math.abs(map.getBearing()) > 1);
+  });
+}
+// Ist das Plugin nicht geladen (z.B. kein Netzwerkzugriff), bleibt die Karte
+// unrotierbar und der Button verhaelt sich einfach wie ein reiner
+// Standort-Button - kein zusaetzlicher Code noetig.
+
+let userMarker = null;
+let scooterLayer = L.layerGroup().addTo(map);
+
+const USER_ICON = L.divIcon({
+  className: '', html: '<div class="user-marker"><div class="ring"></div><div class="core"></div></div>',
+  iconSize:[22,22], iconAnchor:[11,11]
+});
+
+function placeUserMarker(lat, lon){
+  if(userMarker) map.removeLayer(userMarker);
+  userMarker = L.marker([lat, lon], { icon: USER_ICON, zIndexOffset: 1000 }).addTo(map);
+}
+
+/* ---------- Plattform-Erkennung (fuer rental_uris.android / .ios / .web) ---------- */
+function detectPlatform(){
+  const ua = navigator.userAgent || navigator.vendor || '';
+  if(/android/i.test(ua)) return 'android';
+  if(/iPad|iPhone|iPod/.test(ua)) return 'ios';
+  return 'web';
+}
+
+/*
+  Waehlt EXAKT den vom GBFS-Feed fuer dieses eine Fahrzeug gelieferten
+  rental_uris-Link - nichts wird konstruiert oder erraten.
+  Reihenfolge: passender Plattform-Link (android/ios) -> web-Link als
+  fahrzeugspezifischer Fallback -> null, wenn fuer dieses Fahrzeug ueberhaupt
+  kein rental_uris vorhanden ist.
+*/
+function pickVehicleDeepLink(v){
+  if(!v.rentalUri) return null;
+  const platform = detectPlatform();
+  const platformUrl = v.rentalUri[platform];
+  if(platformUrl) return { url: platformUrl, specific: true };
+  if(v.rentalUri.web) return { url: v.rentalUri.web, specific: true };
+  return null;
+}
+
+let vehiclesById = new Map();
+
+/* GBFS definiert keine eigene "kurze Scooter-Nummer" fuer Endnutzer - es
+   gibt nur die technische Fahrzeug-ID. Ist diese bereits kurz, wird sie
+   direkt gezeigt; sonst wird sie NICHT durch eine erfundene Nummer ersetzt,
+   sondern lediglich lesbarer gekuerzt dargestellt (letzte 6 Zeichen der
+   echten ID) - klar als "Ref." gekennzeichnet, keine neue ID. */
+function shortScooterRef(rawId){
+  if(!rawId) return '–';
+  if(/^[A-Za-z0-9_-]{1,8}$/.test(rawId)) return rawId.toUpperCase();
+  const clean = rawId.replace(/[^A-Za-z0-9]/g, '');
+  return clean.slice(-6).toUpperCase();
+}
+
+function openDetail(v){
+  const p = PROVIDER_META[v.provider];
+  const dl = distLabel(v);
+  const link = pickVehicleDeepLink(v);
+  const rangeKm = v.rangeMeters != null ? (v.rangeMeters/1000).toFixed(1) : null;
+
+  const stats = `
+    <div class="detail-stats">
+      <div class="detail-stat"><b>${v.battery !== null ? v.battery + '%' : '–'}</b><span>Akku</span></div>
+      <div class="detail-stat"><b>${dl || '–'}</b><span>Entfernung</span></div>
+      <div class="detail-stat"><b>${p.name}</b><span>Anbieter</span></div>
+    </div>
+    ${rangeKm ? `<div class="detail-stats"><div class="detail-stat" style="flex:1;"><b>ca. ${rangeKm} km</b><span>Reichweite</span></div></div>` : ''}
+    <div class="section-label" style="margin-top:2px;">Preis</div>
+    <div class="detail-stats" id="priceStats">
+      <div class="detail-stat"><b id="priceUnlock">…</b><span>Entsperren</span></div>
+      <div class="detail-stat"><b id="pricePerMin">…</b><span>Pro Minute</span></div>
+    </div>
+  `;
+
+  let action, note;
+  if(link){
+    // Fahrzeugspezifischer Deep-Link vorhanden -> genau diesen verwenden.
+    action = `<a class="detail-btn" id="startRideBtn" href="${link.url}" target="_blank" rel="noopener">Fahrt starten</a>`;
+    note = `Öffnet genau diesen Scooter in der ${p.name}-App.`;
+  }else{
+    // Kein fahrzeugspezifischer Deep-Link im Feed -> KEIN "Scooter öffnen"-
+    // Button, stattdessen ein klar anders beschrifteter, ehrlicher Fallback
+    // auf die offizielle Anbieter-Seite (kein erfundener Deep-Link). Wird
+    // NICHT als Fahrt protokolliert, da kein konkretes Fahrzeug geoeffnet wird.
+    action = `<a class="detail-btn fallback" href="${p.homepage}" target="_blank" rel="noopener">${p.name}-App öffnen</a>`;
+    note = `Für dieses Fahrzeug liefert der Datenfeed keinen fahrzeugspezifischen Deep-Link – daher nur ein allgemeiner Link zu ${p.name}.`;
+  }
+
+  detailBody.innerHTML = `
+    <div class="detail-top">
+      ${logoHtml(v.provider, p.color)}
+      <div>
+        <div class="detail-title">Scooter #${shortScooterRef(v.rawId)}</div>
+        <div class="detail-sub">Anbieter: ${p.name}</div>
+      </div>
+      <div class="detail-close" id="detailClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    ${stats}
+    ${action}
+    <div class="detail-note">${note}</div>
+  `;
+  detailBody.querySelector('#detailClose').addEventListener('click', closeDetail);
+  detailOverlay.classList.add('show');
+
+  // Preise stammen aus dem echten system_pricing_plans-Feed - werden
+  // asynchron nachgeladen, ohne den Rest der Ansicht zu blockieren.
+  getSystemPricing(v.systemId).then(pricing=>{
+    if(!detailOverlay.classList.contains('show')) return; // Ansicht inzwischen geschlossen
+    const unlockEl = detailBody.querySelector('#priceUnlock');
+    const perMinEl = detailBody.querySelector('#pricePerMin');
+    if(!unlockEl || !perMinEl) return; // zwischenzeitlich ein anderer Scooter geoeffnet
+    unlockEl.textContent = pricing?.unlock != null ? `${pricing.unlock.toFixed(2)} ${pricing.currency||'€'}` : 'nicht verfügbar';
+    perMinEl.textContent = pricing?.perMin != null ? `${pricing.perMin.toFixed(2)} ${pricing.currency||'€'}/min` : 'nicht verfügbar';
+  });
+}
+
+let selectedMarkerId = null;
+function highlightMarker(id){
+  if(selectedMarkerId && selectedMarkerId !== id) clearMarkerHighlight();
+  selectedMarkerId = id;
+  const marker = markersById.get(id);
+  if(marker?._icon) marker._icon.classList.add('nav-selected');
+}
+function clearMarkerHighlight(){
+  if(!selectedMarkerId) return;
+  // Waehrend aktiver Navigation bleibt der Navigations-Scooter hervorgehoben.
+  if(!(navigationActive && selectedMarkerId === navScooterId)){
+    const marker = markersById.get(selectedMarkerId);
+    if(marker?._icon) marker._icon.classList.remove('nav-selected');
+  }
+  selectedMarkerId = null;
+}
+
+function closeDetail(){
+  detailOverlay.classList.remove('show');
+  clearMarkerHighlight();
+}
+
+function selectScooter(id){
+  const v = vehiclesById.get(id);
+  if(!v) return; // Fahrzeug nicht (mehr) im aktuellen Datenstand
+  map.flyTo([v.lat, v.lon], 17, { duration:0.7, easeLinearity:0.25 });
+  highlightMarker(id);
+  openDetail(v);
+}
+
+const detailOverlay = document.getElementById('detailOverlay');
+const detailBody = document.getElementById('detailBody');
+detailOverlay.addEventListener('click', (e)=>{ if(e.target === detailOverlay) closeDetail(); });
+
+/* =====================================================================
+   EINKAUFEN & SPAREN
+
+   Datenquellen-Hinweis (Recherche vor der Implementierung, wie gefordert):
+   - SnapMarkt-Server (github.com/LS19GamerMarius/snapmarkt-server): laut
+     eigenem README ein Puppeteer-Scraper gegen REWE/Lidl/Aldi/Penny-
+     Webseiten. Wird NICHT eingebunden - unautorisiertes Scraping fremder
+     Websites, unabhaengig von der Verpackung.
+   - rewe-price-data (github.com/L480/rewe-price-data): erzeugt einen
+     kompletten REWE-Produktkatalog, den es als offizielles offenes
+     Datenangebot bei REWE nicht gibt - ebenfalls nicht eingebunden.
+   - "Lidl Price Tracker" (github.com/luminati-io/...): luminati-io ist
+     der fruehere Firmenname von Bright Data, einem kommerziellen
+     Scraping-Anbieter - ebenfalls nicht eingebunden.
+   - Marktguru: keine oeffentliche API gefunden - Stub, nicht angebunden.
+   - Open Prices (prices.openfoodfacts.org): ECHTE, offen dokumentierte,
+     community-basierte API des gemeinnuetzigen Open-Food-Facts-Projekts.
+     Wird als einzige echte Live-Quelle genutzt. WICHTIG: das sind von
+     Nutzern gemeldete Preise mit Zeitstempel, keine Kassen-Live-Preise -
+     die UI zeigt deshalb immer "gemeldet vor X" statt "live".
+   - Produktsuche (Name -> Barcode) laeuft ueber die oeffentliche
+     Open-Food-Facts-Suche (world.openfoodfacts.org).
+
+   Provider-Architektur (wie gefordert, PriceProvider-Interface):
+   PriceProvider
+   ├── OpenPricesProvider      (echt, aktiv)
+   ├── SnapMarktProvider       (Stub, requires_review: Scraping)
+   ├── ReweProvider            (Stub, requires_review: keine offizielle API)
+   ├── LidlProvider            (Stub, requires_review: keine offizielle API)
+   └── MarktguruProvider       (Stub, requires_review: keine oeffentliche API gefunden)
+   ===================================================================== */
+
+class PriceProvider{
+  constructor(key, name){ this.key = key; this.name = name; this.status = 'unknown'; }
+  /** @returns {Promise<object[]>} Preis-Eintraege im internen Schema (siehe unten) */
+  async getPrices(productQuery){ throw new Error(`${this.key}: getPrices nicht implementiert`); }
+}
+
+/** Stub fuer Quellen ohne verifizierte, zulaessige oeffentliche API. Liefert
+ *  bewusst NIE Daten - nur einen Status, den die UI ehrlich anzeigen kann,
+ *  statt eine Quelle vorzutaeuschen, die es nicht gibt. */
+class StubPriceProvider extends PriceProvider{
+  constructor(key, name, reason){ super(key, name); this.status = 'unavailable'; this.reason = reason; }
+  async getPrices(){ return []; }
+}
+
+function timeAgoLabel(dateIso){
+  if(!dateIso) return null;
+  const diffMs = Date.now() - new Date(dateIso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if(mins < 1) return 'gerade eben gemeldet';
+  if(mins < 60) return `gemeldet vor ${mins} Min.`;
+  const hours = Math.round(mins/60);
+  if(hours < 24) return `gemeldet vor ${hours} Std.`;
+  const days = Math.round(hours/24);
+  return `gemeldet vor ${days} Tag${days===1?'':'en'}`;
+}
+
+class OpenPricesProvider extends PriceProvider{
+  constructor(){ super('openprices', 'Open Prices'); this.status = 'ok'; }
+
+  /** Sucht zunaechst ueber die oeffentliche Open-Food-Facts-Suche nach
+   *  einem passenden Produkt (liefert den Barcode), fragt dann Open Prices
+   *  nach kuerzlich gemeldeten Preisen fuer diesen Barcode ab. */
+  async getPrices(productName){
+    try{
+      const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(productName)}&search_simple=1&action=process&json=1&page_size=1&fields=code,product_name,brands,quantity,image_small_url`;
+      const searchRes = await fetch(searchUrl);
+      if(!searchRes.ok) throw new Error('HTTP ' + searchRes.status);
+      const searchJson = await searchRes.json();
+      const product = searchJson.products?.[0];
+      if(!product?.code){ this.status = 'ok'; return []; } // kein passendes Produkt gefunden - kein Fehler, nur kein Treffer
+
+      const pricesUrl = `https://prices.openfoodfacts.org/api/v1/prices?product_code=${encodeURIComponent(product.code)}`;
+      const pricesRes = await fetch(pricesUrl);
+      if(!pricesRes.ok) throw new Error('HTTP ' + pricesRes.status);
+      const pricesJson = await pricesRes.json();
+      // Response-Huelle defensiv behandeln (Feldname der Ergebnisliste war
+      // aus der Doku nicht zweifelsfrei zu bestimmen).
+      const items = pricesJson.items || pricesJson.results || [];
+
+      this.status = 'ok';
+      return items.slice(0, 10).map(p => ({
+        provider: this.key,
+        productName: product.product_name || productName,
+        productCode: product.code,
+        brand: product.brands || null,
+        quantity: product.quantity || null,
+        imageUrl: product.image_small_url || null,
+        price: p.price,
+        currency: p.currency || 'EUR',
+        originalPrice: p.price_without_discount ?? null,
+        discounted: !!p.price_is_discounted,
+        retailer: p.location?.osm_name || p.store?.name || 'unbekannter Markt',
+        reportedAt: p.created || p.date || p.price_date || null,
+        source: 'Open Prices (community-gemeldet)'
+      }));
+    }catch(err){
+      this.status = 'error';
+      return [];
+    }
+  }
+}
+
+/* =====================================================================
+   OFFERHOPPER.AI - ueber eigenen Backend-Proxy (siehe /combine-backend)
+
+   Der direkte Browser-Aufruf gegen mcp.offerhopper.ai ist wie erwartet an
+   CORS gescheitert (MCP ist fuer KI-Agenten gebaut, nicht fuer Web-Apps).
+   Der eigentliche MCP-Handshake (initialize -> tools/list -> tools/call)
+   laeuft jetzt serverseitig im mitgelieferten combine-backend-Projekt -
+   dort existiert CORS schlicht nicht, weil es eine Browser-Regel ist.
+   Der Browser ruft nur noch den eigenen, simplen Endpunkt auf.
+
+   WICHTIG: Passe BACKEND_BASE_URL an, sobald das Backend nicht mehr lokal
+   auf deinem Rechner, sondern auf einem echten Server laeuft. */
+
+const BACKEND_BASE_URL = 'http://localhost:8788'; // TODO: auf echte Backend-Domain umstellen, sobald deployed
+
+class OfferHopperProvider extends PriceProvider{
+  constructor(){
+    super('offerhopper', 'offerhopper.ai');
+  }
+
+  async getPrices(productName){
+    if(!userPos){ this.status = 'unavailable'; return []; }
+    try{
+      const location = userCityName || `${userPos.lat},${userPos.lon}`;
+      const url = `${BACKEND_BASE_URL}/api/offerhopper-price?items=${encodeURIComponent(productName)}&location=${encodeURIComponent(location)}`;
+      const res = await fetch(url);
+      if(!res.ok){
+        // Backend antwortet bewusst mit 502 statt erfundenen Preisen,
+        // wenn offerhopper selbst nicht erreichbar war (siehe server.js).
+        throw new Error('HTTP ' + res.status);
+      }
+      const json = await res.json();
+      this.status = 'ok';
+      return json.prices || [];
+    }catch(err){
+      this.status = 'error';
+      this.reason = `Backend-Proxy nicht erreichbar (läuft er unter ${BACKEND_BASE_URL}? siehe /combine-backend/README.md).`;
+      return [];
+    }
+  }
+}
+
+const PRICE_PROVIDERS = {
+  openprices: new OpenPricesProvider(),
+  offerhopper: new OfferHopperProvider(),
+  snapmarkt: new StubPriceProvider('snapmarkt', 'SnapMarkt', 'Quelle scrapt laut eigener Doku REWE/Lidl/Aldi/Penny-Webseiten - nicht eingebunden.'),
+  rewe: new StubPriceProvider('rewe', 'REWE', 'Keine offizielle oeffentliche REWE-Preis-API gefunden.'),
+  lidl: new StubPriceProvider('lidl', 'Lidl', 'Keine offizielle oeffentliche Lidl-Preis-API gefunden.'),
+  marktguru: new StubPriceProvider('marktguru', 'Marktguru', 'Keine oeffentliche Marktguru-API gefunden.')
+};
+
+async function comparePricesForItem(itemName){
+  const primary = PRICE_PROVIDERS.offerhopper;
+  const fallback = PRICE_PROVIDERS.openprices;
+  const stubs = Object.values(PRICE_PROVIDERS).filter(p => p !== primary && p !== fallback);
+
+  let prices = await primary.getPrices(itemName).catch(()=>[]);
+  let usedFallback = false;
+  if(!prices.length){
+    // offerhopper ist die Hauptquelle - Open Prices springt nur ein,
+    // wenn offerhopper fuer DIESES Produkt nichts liefert (nicht generell
+    // parallel, damit offerhopper wirklich die massgebliche Quelle ist).
+    prices = await fallback.getPrices(itemName).catch(()=>[]);
+    usedFallback = true;
+  }
+
+  const providerStatus = [primary, fallback, ...stubs].map(p => ({ key:p.key, name:p.name, status:p.status, reason:p.reason || null }));
+  return { prices: prices.sort((a,b)=> a.price - b.price), providerStatus, usedFallback };
+}
+
+/* ---------- Einkaufslisten (lokal, kein Backend) ---------- */
+const SHOPPING_LISTS_KEY = 'combine_shopping_lists_v1';
+function loadShoppingLists(){ try{ return JSON.parse(localStorage.getItem(SHOPPING_LISTS_KEY) || '[]'); }catch(e){ return []; } }
+function saveShoppingLists(lists){ try{ localStorage.setItem(SHOPPING_LISTS_KEY, JSON.stringify(lists)); }catch(e){} }
+
+let shoppingView = 'home'; // 'home' | 'list' | 'compare' | 'optimize' | 'offers'
+let activeListId = null;
+
+function goShopping(view, listId){
+  shoppingView = view;
+  if(listId !== undefined) activeListId = listId;
+  renderShoppingScreen();
+}
+
+function renderShoppingScreen(){
+  shoppingBack.style.display = shoppingView === 'home' ? 'none' : 'flex';
+  shoppingMenuBtn.style.display = shoppingView === 'home' ? 'flex' : 'none';
+  const titles = { home:'Einkauf', list:'Einkaufsliste', compare:'Preisvergleich', optimize:'Einkauf optimieren', offers:'Angebote in deiner Nähe' };
+  shoppingTitle.textContent = titles[shoppingView];
+  shoppingSub.style.display = shoppingView === 'home' ? 'block' : 'none';
+  closeShoppingMenu();
+
+  if(shoppingView === 'home') renderShoppingHome();
+  else if(shoppingView === 'list') renderShoppingList();
+  else if(shoppingView === 'compare') renderShoppingCompare();
+  else if(shoppingView === 'optimize') renderShoppingOptimize();
+  else if(shoppingView === 'offers') renderShoppingOffers();
+}
+shoppingBack.addEventListener('click', ()=> goShopping(shoppingView === 'compare' || shoppingView === 'optimize' ? 'list' : 'home'));
+
+function createNewList(){
+  const lists = loadShoppingLists();
+  const list = { id:'list_'+Date.now(), name:`Einkaufsliste ${lists.length+1}`, items:[], createdAt:Date.now() };
+  lists.unshift(list);
+  saveShoppingLists(lists);
+  goShopping('list', list.id);
+}
+
+/* ---------- Dropdown-Menü (ersetzt die vier separaten Aktions-Zeilen) ---------- */
+let shoppingMenuOpen = false;
+function closeShoppingMenu(){
+  shoppingMenuOpen = false;
+  const el = document.getElementById('shoppingMenuDropdown');
+  if(el) el.remove();
+}
+function toggleShoppingMenu(){
+  if(shoppingMenuOpen){ closeShoppingMenu(); return; }
+  shoppingMenuOpen = true;
+  const menu = document.createElement('div');
+  menu.id = 'shoppingMenuDropdown';
+  menu.className = 'dropdown-menu';
+  menu.innerHTML = `
+    <div class="dropdown-item" id="menuCreate">Einkaufsliste erstellen</div>
+    <div class="dropdown-item" id="menuUpload">Einkaufsliste hochladen</div>
+    <div class="dropdown-item" id="menuPhoto">Einkaufszettel fotografieren</div>
+    <div class="dropdown-item" id="menuLists">Meine Listen</div>
+  `;
+  shoppingMenuBtn.parentElement.appendChild(menu);
+  menu.querySelector('#menuCreate').addEventListener('click', ()=>{ closeShoppingMenu(); createNewList(); });
+  menu.querySelector('#menuUpload').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    ocrFileInput.removeAttribute('capture');
+    ocrFileInput.click();
+  });
+  menu.querySelector('#menuPhoto').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    ocrFileInput.setAttribute('capture','environment');
+    ocrFileInput.click();
+  });
+  menu.querySelector('#menuLists').addEventListener('click', ()=>{
+    closeShoppingMenu();
+    document.getElementById('myListsSection')?.scrollIntoView({ behavior:'smooth' });
+  });
+}
+shoppingMenuBtn.addEventListener('click', toggleShoppingMenu);
+
+const ocrFileInput = document.createElement('input');
+ocrFileInput.type = 'file';
+ocrFileInput.accept = 'image/*';
+ocrFileInput.style.display = 'none';
+document.body.appendChild(ocrFileInput);
+ocrFileInput.addEventListener('change', handleOcrUpload);
+
+/* ---------- Echte Supermärkte in der Naehe (OpenStreetMap/Overpass) ----------
+   Dieselbe legitime, offene Datenquelle, die bereits fuer Ziel-Suche/Routing
+   genutzt wird - keine erfundene Haendlerliste. */
+let nearbyMarkets = [];
+let selectedMarkets = new Set();
+let marketsLoaded = false;
+
+function colorForBrand(name){
+  const palette = ['#C2410C','#0F6E56','#3B6EF6','#7C5CFC','#FF8A3D','#1E8E4F','#B33F7A','#0A5C48'];
+  let hash = 0;
+  for(const c of name) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  return palette[hash % palette.length];
+}
+function marketBadgeHtml(name, size=34){
+  const initial = (name.trim()[0] || '?').toUpperCase();
+  return `<div class="logo" style="background:${colorForBrand(name)}; width:${size}px; height:${size}px;"><span style="color:#fff; font-family:var(--font-display); font-weight:700; font-size:${Math.round(size*0.4)}px;">${initial}</span></div>`;
+}
+
+// Mehrere oeffentliche Overpass-Server, da die Hauptinstanz gelegentlich
+// ueberlastet ist - erst bei allen Fehlschlaegen wird aufgegeben.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter'
+];
+
+async function runOverpassQuery(query){
+  for(const endpoint of OVERPASS_ENDPOINTS){
+    try{
+      const res = await fetch(endpoint, { method:'POST', body: query });
+      if(!res.ok) continue;
+      const json = await res.json();
+      if(Array.isArray(json.elements)) return json.elements;
+    }catch(err){ /* naechsten Server versuchen */ }
+  }
+  return null; // alle Server fehlgeschlagen
+}
+
+let marketsCityOverride = null; // { name, lat, lon } - gesetzt durch die Stadtsuche, ueberschreibt den echten Standort
+
+function elementsToMarkets(elements, refPos){
+  const raw = elements
+    .map(el => ({
+      name: el.tags?.brand || el.tags?.name || 'Supermarkt',
+      lat: el.lat ?? el.center?.lat,
+      lon: el.lon ?? el.center?.lon
+    }))
+    .filter(s => s.lat && s.lon);
+
+  // Nach Marke buendeln (mehrere Filialen derselben Kette -> ein Chip),
+  // dabei die naechstgelegene Filiale je Marke fuer die Sortierung nutzen.
+  const byBrand = new Map();
+  raw.forEach(s=>{
+    const dist = refPos ? haversineMeters(refPos.lat, refPos.lon, s.lat, s.lon) : 0;
+    const existing = byBrand.get(s.name);
+    if(!existing || dist < existing.dist) byBrand.set(s.name, { name:s.name, dist });
+  });
+  return [...byBrand.values()].sort((a,b)=> a.dist - b.dist);
+}
+
+/** Liefert ALLE Supermaerkte in der massgeblichen Stadt - das ist entweder
+ *  eine per Stadtsuche gezielt ausgewaehlte Stadt (marketsCityOverride)
+ *  oder, wenn keine gesetzt ist, wie bisher die Stadt des echten
+ *  Standorts. Ueber die echte OSM-Verwaltungsgrenze (area-Query), nicht
+ *  nur einen Radius. Faellt auf einen grosszuegigen 15-km-Radius zurueck,
+ *  falls der Stadtname (noch) nicht bekannt ist oder die Grenzen-Abfrage
+ *  nichts liefert. */
+async function fetchNearbySupermarkets(){
+  const refPos = marketsCityOverride || userPos;
+  const refCityName = marketsCityOverride ? marketsCityOverride.name : userCityName;
+  if(!refPos) return [];
+
+  if(refCityName){
+    const areaQuery = `[out:json][timeout:25];area["name"="${refCityName}"]["boundary"="administrative"]->.a;(node["shop"="supermarket"](area.a);way["shop"="supermarket"](area.a););out center 200;`;
+    const elements = await runOverpassQuery(areaQuery);
+    if(elements && elements.length) return elementsToMarkets(elements, refPos);
+  }
+
+  // Fallback: Stadtname unbekannt oder keine Treffer ueber die Grenzen-Abfrage
+  const radius = 15000;
+  const radiusQuery = `[out:json][timeout:25];(node["shop"="supermarket"](around:${radius},${refPos.lat},${refPos.lon});way["shop"="supermarket"](around:${radius},${refPos.lat},${refPos.lon}););out center 100;`;
+  const elements = await runOverpassQuery(radiusQuery);
+  return elements ? elementsToMarkets(elements, refPos) : [];
+}
+
+async function ensureNearbyMarkets(force){
+  if(marketsLoaded && !force) return;
+  const result = await fetchNearbySupermarkets();
+  nearbyMarkets = result;
+  selectedMarkets = new Set(nearbyMarkets.map(m => m.name));
+  // Nur als "geladen" markieren, wenn es tatsaechlich Ergebnisse gab -
+  // ein einzelner fehlgeschlagener Versuch (z.B. Overpass ueberlastet)
+  // soll beim naechsten Aufruf der Einkauf-Seite erneut versucht werden,
+  // statt dauerhaft leer zu bleiben.
+  marketsLoaded = result.length > 0;
+}
+
+/* Locker pruefen, ob ein von Open Prices gemeldeter Standortname zu einer
+   der ausgewaehlten Supermarkt-Marken passt (Teilstring, Gross-/Kleinschreibung
+   ignorieren) - Namen aus zwei unabhaengigen Quellen matchen selten exakt. */
+function retailerMatchesSelection(retailerName){
+  if(selectedMarkets.size === 0) return true;
+  const r = retailerName.toLowerCase();
+  return [...selectedMarkets].some(m => r.includes(m.toLowerCase()) || m.toLowerCase().includes(r));
+}
+
+const STAPLE_QUERIES = ['Milch', 'Brot', 'Butter', 'Eier', 'Kaffee', 'Nudeln'];
+
+async function renderShoppingHome(){
+  const lists = loadShoppingLists();
+  const marketsHeading = marketsCityOverride ? `Supermärkte in ${marketsCityOverride.name}` : 'Supermärkte in deiner Nähe';
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box" id="marketsLoadingNote">${(marketsCityOverride || userPos) ? 'Lade Supermärkte …' : 'Ermittle deinen Standort …'}</div>
+    <div class="food-lead">${marketsHeading}</div>
+    <div class="cat-scroll" id="marketChips"></div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin:16px 2px 8px;">
+      <div class="food-lead" style="margin:0;">Kürzlich gemeldete Preise</div>
+    </div>
+    <div id="dealsGrid" class="deals-grid"><div class="empty loading-pulse">Lade Preise …</div></div>
+
+    <div class="compare-row" id="optimizeCta" style="cursor:pointer; margin-top:18px; border-color:var(--accent);">
+      <div class="compare-top"><div class="compare-name">💸 Einkauf optimieren</div></div>
+      <div class="filter-note">Vergleicht deine gespeicherte Liste über alle Supermärkte hinweg – ein Markt oder maximale Ersparnis über mehrere Märkte.</div>
+    </div>
+
+    <div class="section-label" id="myListsSection">Deine Listen</div>
+    <div id="shoppingListsList"></div>
+  `;
+
+  document.getElementById('optimizeCta').addEventListener('click', ()=>{
+    const ls = loadShoppingLists();
+    if(!ls.length){ createNewList(); return; }
+    goShopping('optimize', ls[0].id);
+  });
+
+  const listsEl = document.getElementById('shoppingListsList');
+  if(!lists.length){
+    listsEl.innerHTML = '<div class="empty">Noch keine Einkaufsliste gespeichert.</div>';
+  }else{
+    lists.forEach(l=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.cursor = 'pointer';
+      row.innerHTML = chevronRowHtml(l.name, `${l.items.length} Produkt${l.items.length===1?'':'e'}`);
+      row.addEventListener('click', ()=> goShopping('list', l.id));
+      listsEl.appendChild(row);
+    });
+  }
+
+  await ensureNearbyMarkets();
+  const loadingNote = document.getElementById('marketsLoadingNote');
+  if(loadingNote){
+    const effectiveCityName = marketsCityOverride ? marketsCityOverride.name : userCityName;
+    if(nearbyMarkets.length){
+      loadingNote.textContent = effectiveCityName
+        ? `${nearbyMarkets.length} Supermärkte in ${effectiveCityName} gefunden (OpenStreetMap).`
+        : `${nearbyMarkets.length} Supermärkte in deiner Nähe gefunden (OpenStreetMap).`;
+    }else{
+      loadingNote.innerHTML = 'Keine Supermärkte gefunden – das kann an einer überlasteten Datenquelle liegen. <span id="retryMarkets" style="text-decoration:underline; cursor:pointer; font-weight:600;">Erneut versuchen</span>';
+      document.getElementById('retryMarkets')?.addEventListener('click', async ()=>{
+        loadingNote.textContent = 'Lade erneut …';
+        await ensureNearbyMarkets(true);
+        renderShoppingHome();
+      });
+    }
+  }
+
+  const chipsEl = document.getElementById('marketChips');
+  if(chipsEl){
+    chipsEl.innerHTML = nearbyMarkets.map(m => `
+      <div class="market-chip ${selectedMarkets.has(m.name) ? 'on' : ''}" data-name="${escapeHtml(m.name)}">
+        ${marketBadgeHtml(m.name, 22)}<span>${escapeHtml(m.name)}</span>
+      </div>
+    `).join('') || '<div class="empty">Keine Supermärkte gefunden.</div>';
+    chipsEl.querySelectorAll('.market-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const name = chip.dataset.name;
+        if(selectedMarkets.has(name)) selectedMarkets.delete(name); else selectedMarkets.add(name);
+        chip.classList.toggle('on');
+        renderDealsGrid();
+      });
+    });
+  }
+
+  renderDealsGrid();
+}
+
+/* =====================================================================
+   STADTSUCHE (Ergänzung, bestehende "Supermärkte in meiner Nähe" bleibt
+   unveraendert erhalten) - sucht gezielt eine Stadt (Nominatim, dieselbe
+   Quelle wie bei der Ziel-/Reverse-Geocoding-Suche) und ueberschreibt die
+   Supermarkt-Anzeige darauf, bis der Nutzer seinen Standort ueber den
+   bestehenden Standort-Button auf der Karte aktualisiert (siehe
+   locateAndLoad - setzt marketsCityOverride dort zurueck).
+   ===================================================================== */
+const citySearchBtn = document.getElementById('citySearchBtn');
+const citySearchPanel = document.getElementById('citySearchPanel');
+const citySearchInput = document.getElementById('citySearchInput');
+const citySearchResults = document.getElementById('citySearchResults');
+
+citySearchBtn.addEventListener('click', ()=>{
+  const show = citySearchPanel.style.display === 'none';
+  citySearchPanel.style.display = show ? 'block' : 'none';
+  if(show) citySearchInput.focus();
+});
+
+let citySearchTimer = null;
+citySearchInput.addEventListener('input', ()=>{
+  clearTimeout(citySearchTimer);
+  const q = citySearchInput.value.trim();
+  if(q.length < 2){ citySearchResults.innerHTML = ''; return; }
+  citySearchResults.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
+  citySearchTimer = setTimeout(()=> runCitySearch(q), 400);
+});
+
+async function runCitySearch(q){
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=5&featureType=city`, { headers: { 'Accept-Language':'de' } });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    renderCitySearchResults(results);
+  }catch(err){
+    citySearchResults.innerHTML = '<div class="empty">Suche gerade nicht möglich.</div>';
+  }
+}
+
+function renderCitySearchResults(results){
+  if(!results.length){
+    citySearchResults.innerHTML = '<div class="empty">Keine Stadt gefunden.</div>';
+    return;
+  }
+  citySearchResults.innerHTML = '';
+  results.forEach(r=>{
+    const shortName = r.name || r.display_name.split(',')[0];
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<div class="rowinfo"><div class="name">${escapeHtml(shortName)}</div><div class="meta">${escapeHtml(r.display_name)}</div></div>`;
+    row.addEventListener('click', ()=>{
+      marketsCityOverride = { name: shortName, lat: Number(r.lat), lon: Number(r.lon) };
+      citySearchPanel.style.display = 'none';
+      citySearchInput.value = '';
+      citySearchResults.innerHTML = '';
+      marketsLoaded = false; // erzwingt einen Neuabruf fuer die neue Stadt
+      renderShoppingHome();
+    });
+    citySearchResults.appendChild(row);
+  });
+}
+
+/* =====================================================================
+   DEV-ONLY: Backend-Erreichbarkeits-Anzeige.
+   NICHT fuer die fertige App gedacht - bitte vor dem Live-Gang entfernen
+   (diesen ganzen Block + das Badge-Element "backendStatusBadge" im HTML).
+   ===================================================================== */
+const DEV_SHOW_BACKEND_STATUS = true; // <- vor dem Live-Gang auf false stellen oder Block entfernen
+const backendStatusBadge = document.getElementById('backendStatusBadge');
+
+async function checkBackendHealthDev(){
+  if(!DEV_SHOW_BACKEND_STATUS) return;
+  try{
+    const res = await fetch(BACKEND_BASE_URL + '/', { signal: AbortSignal.timeout(3000) });
+    backendStatusBadge.style.display = res.ok ? 'none' : 'flex';
+  }catch(err){
+    backendStatusBadge.style.display = 'flex';
+  }
+}
+if(DEV_SHOW_BACKEND_STATUS){
+  checkBackendHealthDev();
+  setInterval(checkBackendHealthDev, 15000); // alle 15s neu pruefen, waehrend die App offen ist
+}
+
+async function renderDealsGrid(){
+  const grid = document.getElementById('dealsGrid');
+  if(!grid) return;
+  const activeList = loadShoppingLists()[0];
+  const queries = (activeList?.items?.length ? activeList.items.map(i=>i.name) : STAPLE_QUERIES).slice(0, 6);
+
+  const results = await Promise.all(queries.map(async q => ({ query:q, ...(await comparePricesForItem(q)) })));
+  const cards = [];
+  results.forEach(r=>{
+    const match = r.prices.find(p => retailerMatchesSelection(p.retailer)) || r.prices[0];
+    if(match) cards.push({ query:r.query, ...match });
+  });
+
+  if(!cards.length){
+    grid.innerHTML = '<div class="empty">Für die ausgewählten Supermärkte aktuell keine gemeldeten Preise gefunden.</div>';
+    return;
+  }
+  grid.innerHTML = cards.map(c => `
+    <div class="deal-card">
+      <div class="deal-thumb">${c.imageUrl ? `<img src="${c.imageUrl}" alt="" loading="lazy">` : '🛒'}</div>
+      <div class="deal-name">${escapeHtml(c.productName || c.query)}</div>
+      <div class="deal-price">${c.price.toFixed(2)} €</div>
+      <div class="deal-meta">${escapeHtml(c.retailer)} · ${timeAgoLabel(c.reportedAt) || 'Datum unbekannt'}</div>
+    </div>
+  `).join('');
+}
+
+
+
+async function handleOcrUpload(e){
+  const file = e.target.files?.[0];
+  if(!file) return;
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Zettel wird gelesen (Texterkennung) …</div>';
+  try{
+    const { data } = await Tesseract.recognize(file, 'deu');
+    const lines = data.text.split('\n').map(l=>l.trim()).filter(Boolean);
+    const items = lines.map(parseShoppingLine).filter(it => it.name);
+
+    const lists = loadShoppingLists();
+    const list = { id:'list_'+Date.now(), name:`Erkannte Liste ${lists.length+1}`, items, createdAt:Date.now() };
+    lists.unshift(list);
+    saveShoppingLists(lists);
+
+    shoppingContent.innerHTML = `<div class="disclaimer-box">Wir haben ${items.length} Produkt${items.length===1?'':'e'} erkannt. Texterkennung funktioniert am zuverlässigsten bei gedruckter/getippter Schrift – bei handschriftlichen Zetteln bitte die Liste danach kurz prüfen.</div>`;
+    setTimeout(()=> goShopping('list', list.id), 900);
+  }catch(err){
+    shoppingContent.innerHTML = '<div class="empty">Texterkennung fehlgeschlagen. Bitte die Liste manuell anlegen.</div>';
+  }
+}
+
+/** Einfache Heuristik: "2x Eier", "2 Eier", "Eier" -> {qty, name}. Menge/Einheit
+ *  sind bewusst konservativ - Fehlererkennung soll der Nutzer im naechsten
+ *  Schritt selbst korrigieren koennen, statt falsch geraten zu werden. */
+function parseShoppingLine(line){
+  const m = line.match(/^(\d+)\s*[x×]?\s*(.+)$/i);
+  if(m) return { name: m[2].trim(), qty: Number(m[1]), unit: 'Stück' };
+  return { name: line, qty: 1, unit: 'Stück' };
+}
+
+function getActiveList(){
+  return loadShoppingLists().find(l => l.id === activeListId) || null;
+}
+function updateActiveList(mutator){
+  const lists = loadShoppingLists();
+  const list = lists.find(l => l.id === activeListId);
+  if(!list) return;
+  mutator(list);
+  saveShoppingLists(lists);
+  renderShoppingList();
+}
+
+function renderShoppingList(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  shoppingTitle.textContent = list.name;
+
+  const itemsHtml = list.items.map((it, i)=>`
+    <div class="row" style="cursor:default;">
+      <div class="rowinfo">
+        <div class="name">${escapeHtml(it.name)}</div>
+        <div class="meta">${it.qty} × ${escapeHtml(it.unit)}</div>
+      </div>
+      <div class="goto" data-i="${i}" data-act="remove" style="cursor:pointer;">Entfernen</div>
+    </div>
+  `).join('');
+
+  shoppingContent.innerHTML = `
+    ${list.items.length ? itemsHtml : '<div class="empty">Noch keine Produkte in dieser Liste.</div>'}
+    <div class="filter-section">
+      <div class="field-label">Neues Produkt</div>
+      <input class="field-input" id="newItemName" placeholder="z.B. Milch" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <input class="field-input" id="newItemQty" type="number" min="1" value="1" style="width:70px;">
+        <select class="field-input" id="newItemUnit" style="flex:1;">
+          <option>Stück</option><option>Liter</option><option>ml</option><option>kg</option><option>g</option><option>Packung</option>
+        </select>
+      </div>
+      <div class="detail-btn" id="addItemBtn" style="margin-top:10px;">Hinzufügen</div>
+    </div>
+    <div class="detail-btn" id="compareBtn" style="margin-top:6px;" ${list.items.length?'':'disabled'}>Preise vergleichen</div>
+  `;
+
+  shoppingContent.querySelectorAll('[data-act="remove"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> updateActiveList(l => l.items.splice(Number(btn.dataset.i), 1)));
+  });
+  document.getElementById('addItemBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newItemName').value.trim();
+    if(!name) return;
+    const qty = Math.max(1, Number(document.getElementById('newItemQty').value) || 1);
+    const unit = document.getElementById('newItemUnit').value;
+    updateActiveList(l => l.items.push({ name, qty, unit }));
+  });
+  document.getElementById('compareBtn').addEventListener('click', ()=> goShopping('compare', list.id));
+}
+
+async function renderShoppingCompare(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  if(!list.items.length){
+    shoppingContent.innerHTML = '<div class="empty">Diese Liste enthält keine Produkte.</div>';
+    return;
+  }
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Preise werden verglichen …</div>';
+
+  const results = await Promise.all(list.items.map(async it => ({ item: it, ...(await comparePricesForItem(it.name)) })));
+
+  const statusRow = results[0]?.providerStatus.map(s=>{
+    const icon = s.status === 'ok' ? '✓' : (s.status === 'unavailable' ? '—' : '⚠️');
+    const color = s.status === 'ok' ? 'var(--ok)' : 'var(--ink-soft)';
+    return `<div class="provider-status-chip"><span>${s.name}</span> <span style="color:${color}">${icon}</span></div>`;
+  }).join('') || '';
+
+  const itemsHtml = results.map(r=>{
+    if(!r.prices.length){
+      return `<div class="compare-row"><div class="compare-name">${escapeHtml(r.item.name)}</div><div class="filter-note">Kein gemeldeter Preis gefunden (Open Prices) – ${r.item.qty} × ${escapeHtml(r.item.unit)}.</div></div>`;
+    }
+    const cheapest = r.prices[0];
+    const rows = r.prices.slice(0,4).map(p=>`
+      <div class="menu-item-row">
+        <div class="menu-item-top">
+          <div>
+            <div class="menu-item-name">${escapeHtml(p.retailer)}</div>
+            <div class="menu-item-desc">${timeAgoLabel(p.reportedAt) || 'Datum unbekannt'}${p.discounted ? ' · reduziert' : ''}</div>
+          </div>
+          <div class="menu-item-price">${p.originalPrice ? `<span class="orig">${p.originalPrice.toFixed(2)} €</span>` : ''}${p.price.toFixed(2)} €</div>
+        </div>
+      </div>
+    `).join('');
+    return `
+      <div class="compare-row">
+        <div class="compare-top"><div class="compare-name">${escapeHtml(r.item.name)} <span style="font-weight:400; color:var(--ink-soft); font-size:12px;">(${r.item.qty} × ${escapeHtml(r.item.unit)})</span></div></div>
+        ${rows}
+        <div class="offer-badge">Günstigster gemeldeter Preis: ${cheapest.retailer} – ${cheapest.price.toFixed(2)} €</div>
+      </div>
+    `;
+  }).join('');
+
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box">Hauptquelle: <b>offerhopper.ai</b> (live abgefragt, deckt REWE/Aldi/dm/Rossmann/Lidl/Penny/Netto/Norma/Edeka/Globus ab). <b>Open Prices</b> springt nur ein, wenn offerhopper für ein Produkt nichts liefert (community-gemeldet, mit Zeitstempel). SnapMarkt/REWE/Lidl/Marktguru direkt sind weiterhin nicht angebunden (siehe Anbieter-Status).</div>
+    <div class="provider-status-row">${statusRow}</div>
+    ${itemsHtml}
+  `;
+}
+
+/* =====================================================================
+   MAXIMAL SPAREN - Optimierung
+   Zwei Modi:
+   - "Ein Markt": findet den guenstigsten EINZELNEN Haendler, der
+     moeglichst alle Produkte der Liste abdeckt.
+   - "Maximal sparen": waehlt je Produkt unabhaengig den guenstigsten
+     verfuegbaren Haendler - zeigt zusaetzlich, wie viele Maerkte dafuer
+     noetig waeren, und die Ersparnis gegenueber dem besten Ein-Markt-Preis.
+   Rechnet ausschliesslich mit echten, zuvor abgerufenen Open-Prices-Daten -
+   keine erfundenen Preise. Mengen (qty) fliessen in die Summe ein.
+   ===================================================================== */
+
+function computeSingleMarketTotals(perItem){
+  const retailers = new Set();
+  perItem.forEach(r => r.prices.forEach(p => retailers.add(p.retailer)));
+  return [...retailers].map(retailer=>{
+    let total = 0, covered = 0;
+    perItem.forEach(r=>{
+      const hit = r.prices.find(p => p.retailer === retailer);
+      if(hit){ total += hit.price * r.item.qty; covered++; }
+    });
+    return { retailer, total, covered, coversAll: covered === perItem.length };
+  }).sort((a,b)=> (Number(b.coversAll) - Number(a.coversAll)) || (a.total - b.total));
+}
+
+function computeMaxSavings(perItem){
+  let total = 0;
+  const usedRetailers = new Set();
+  const breakdown = perItem.map(r=>{
+    if(!r.prices.length) return { item:r.item, retailer:null, price:null };
+    const cheapest = r.prices[0]; // von comparePricesForItem bereits aufsteigend sortiert
+    total += cheapest.price * r.item.qty;
+    usedRetailers.add(cheapest.retailer);
+    return { item:r.item, retailer:cheapest.retailer, price:cheapest.price };
+  });
+  return { total, storeCount: usedRetailers.size, breakdown };
+}
+
+let optimizeMode = 'single'; // 'single' | 'max'
+let optimizeRouteCache = {}; // { single: route|null, max: route|null } - vermeidet doppelte Anfragen beim Umschalten
+
+async function renderShoppingOptimize(){
+  const list = getActiveList();
+  if(!list){ goShopping('home'); return; }
+  if(!list.items.length){
+    shoppingContent.innerHTML = '<div class="empty">Diese Liste enthält keine Produkte.</div>';
+    return;
+  }
+  optimizeRouteCache = {};
+  shoppingContent.innerHTML = '<div class="empty loading-pulse">Einkauf wird optimiert …</div>';
+  await renderOptimizeShell(list);
+}
+
+async function renderOptimizeShell(list){
+  shoppingContent.innerHTML = `
+    <div class="segmented" id="optimizeSeg">
+      <div class="segmented-opt" data-m="single">🏪 Nur ein Markt</div>
+      <div class="segmented-opt" data-m="max">💰 Maximal sparen</div>
+    </div>
+    <div id="optimizeBody" style="margin-top:16px;"><div class="empty loading-pulse">Route wird berechnet …</div></div>
+  `;
+  const seg = document.getElementById('optimizeSeg');
+  seg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', opt.dataset.m === optimizeMode);
+    opt.addEventListener('click', ()=>{
+      optimizeMode = opt.dataset.m;
+      renderOptimizeShell(list);
+    });
+  });
+  await loadAndRenderOptimize(list);
+}
+
+/** Baut aus der Einkaufsliste einen natuersprachlichen Text ("2x Milch, Eier, Butter"),
+ *  wie ihn plan_optimal_shopping_route erwartet. */
+function listToItemsText(list){
+  return list.items.map(it => it.qty > 1 ? `${it.qty}x ${it.name}` : it.name).join(', ');
+}
+
+async function loadAndRenderOptimize(list){
+  const body = document.getElementById('optimizeBody');
+  const cacheKey = optimizeMode;
+
+  if(optimizeRouteCache[cacheKey] !== undefined){
+    renderOptimizeBody(optimizeRouteCache[cacheKey], list);
+    return;
+  }
+
+  try{
+    if(!userPos) throw new Error('kein Standort');
+    const itemsText = listToItemsText(list);
+    const location = userCityName || `${userPos.lat},${userPos.lon}`;
+    const maxStores = optimizeMode === 'single' ? 1 : undefined;
+    const url = `${BACKEND_BASE_URL}/api/offerhopper-price?items=${encodeURIComponent(itemsText)}&location=${encodeURIComponent(location)}${maxStores ? `&max_stores=${maxStores}` : ''}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if(!json.route) throw new Error('keine Route in der Antwort');
+    optimizeRouteCache[cacheKey] = json.route;
+    renderOptimizeBody(json.route, list);
+  }catch(err){
+    // offerhopper nicht erreichbar/kein Ergebnis - ehrlich auf die eigene,
+    // auf Open-Prices-Einzelabfragen basierende Naeherung zurueckfallen,
+    // statt die Funktion komplett auszublenden.
+    optimizeRouteCache[cacheKey] = null;
+    await renderOwnOptimizeFallback(list, body);
+  }
+}
+
+function renderOptimizeBody(route, list){
+  const body = document.getElementById('optimizeBody');
+  if(!body) return;
+
+  if(!route){
+    body.innerHTML = ''; // renderOwnOptimizeFallback hat bereits selbst gerendert
+    return;
+  }
+
+  const storeNames = route.stores.map(s => s.name).join(', ');
+  const verdictLabel = route.worthTheTrip ? '✅ Lohnt sich' : '⚠️ Eher nicht lohnenswert';
+  const verdictColor = route.worthTheTrip ? 'var(--ok)' : 'var(--err)';
+
+  body.innerHTML = `
+    <div class="nav-info-stats">
+      <div class="nav-info-stat"><b>${route.totalCost != null ? route.totalCost.toFixed(2)+' €' : '–'}</b><span>Gesamtpreis</span></div>
+      <div class="nav-info-stat"><b>${route.stores.length}</b><span>Markt${route.stores.length===1?'':'e'} nötig</span></div>
+      <div class="nav-info-stat"><b>${route.totalTimeWithShoppingMinutes != null ? Math.round(route.totalTimeWithShoppingMinutes)+' Min.' : '–'}</b><span>inkl. Einkauf</span></div>
+    </div>
+    <div class="disclaimer-box" style="border-color:${verdictColor};">
+      <b style="color:${verdictColor};">${verdictLabel}</b> laut offerhopper.ai – berücksichtigt Weg- und Zeitaufwand, nicht nur den reinen Warenpreis.
+      ${route.totalSavings != null ? ` Ersparnis ggü. der günstigsten Einzelpreis-Kombination: ${route.totalSavings.toFixed(2)} €.` : ''}
+    </div>
+    <div class="section-label">Route</div>
+    <div class="filter-note" style="margin-bottom:10px;">${escapeHtml(storeNames)}${route.totalDistanceKm != null ? ` · ${route.totalDistanceKm.toFixed(1)} km zu Fuß` : ''}</div>
+    <div class="section-label">Einkaufsliste je Markt</div>
+    ${route.items.map(it=>`
+      <div class="menu-item-row">
+        <div class="menu-item-top">
+          <div>
+            <div class="menu-item-name">${escapeHtml(it.selectedProduct || it.name)}</div>
+            <div class="menu-item-desc">${escapeHtml(it.store)} · ${it.quantity}× ${escapeHtml(it.unit)}</div>
+          </div>
+          <div class="menu-item-price">${it.regularPrice && it.regularPrice !== it.price ? `<span class="orig">${it.regularPrice.toFixed(2)} €</span>` : ''}${it.totalCost.toFixed(2)} €</div>
+        </div>
+      </div>
+    `).join('')}
+    ${route.shareUrl ? `<a class="detail-btn fallback" href="${route.shareUrl}" target="_blank" rel="noopener" style="display:block; margin-top:14px; text-align:center;">Interaktive Karte ansehen</a>` : ''}
+  `;
+}
+
+/* ---------- Fallback: eigene Naeherung auf Basis einzelner Open-Prices-
+   Abfragen, falls offerhopper.ai gerade nicht erreichbar ist. ---------- */
+async function renderOwnOptimizeFallback(list, body){
+  body.innerHTML = '<div class="empty loading-pulse">offerhopper.ai nicht erreichbar – eigene Näherung wird berechnet …</div>';
+
+  const perItem = await Promise.all(list.items.map(async it => ({ item: it, ...(await comparePricesForItem(it.name)) })));
+  const withData = perItem.filter(r => r.prices.length);
+
+  if(!withData.length){
+    body.innerHTML = '<div class="disclaimer-box">offerhopper.ai ist gerade nicht erreichbar, und für die Produkte dieser Liste liegen auch keine Open-Prices-Daten vor – Optimierung aktuell nicht möglich.</div>';
+    return;
+  }
+
+  const missingCount = list.items.length - withData.length;
+
+  if(optimizeMode === 'single'){
+    const singleTotals = computeSingleMarketTotals(withData);
+    const bestSingle = singleTotals[0] || null;
+    body.innerHTML = `
+      <div class="disclaimer-box">offerhopper.ai gerade nicht erreichbar – Näherung auf Basis einzelner Open-Prices-Meldungen (ohne Wegkosten-Berechnung).${missingCount>0 ? ` Für ${missingCount} Produkt${missingCount===1?'':'e'} liegen keine Preise vor.` : ''}</div>
+      ${bestSingle ? `
+        <div class="nav-info-stats">
+          <div class="nav-info-stat"><b>${bestSingle.total.toFixed(2)} €</b><span>${bestSingle.coversAll ? 'Gesamt' : `nur ${bestSingle.covered}/${list.items.length} Produkte`}</span></div>
+        </div>
+        <div class="section-label">🏆 Günstigster Gesamteinkauf</div>
+        ${singleTotals.slice(0,5).map((s,i)=>`
+          <div class="compare-row ${i===0?'selected':''}">
+            <div class="compare-top"><div class="compare-name">${escapeHtml(s.retailer)}</div>${i===0?'<div class="compare-check">✓</div>':''}</div>
+            <div class="filter-note">${s.total.toFixed(2)} € · deckt ${s.covered}/${list.items.length} Produkte ab</div>
+          </div>
+        `).join('')}
+      ` : '<div class="empty">Kein Markt mit gemeldeten Preisen gefunden.</div>'}
+    `;
+  }else{
+    const maxSaving = computeMaxSavings(withData);
+    body.innerHTML = `
+      <div class="disclaimer-box">offerhopper.ai gerade nicht erreichbar – Näherung auf Basis einzelner Open-Prices-Meldungen (ohne Wegkosten-Berechnung).${missingCount>0 ? ` Für ${missingCount} Produkt${missingCount===1?'':'e'} liegen keine Preise vor.` : ''}</div>
+      <div class="nav-info-stats">
+        <div class="nav-info-stat"><b>${maxSaving.total.toFixed(2)} €</b><span>Optimierter Preis</span></div>
+        <div class="nav-info-stat"><b>${maxSaving.storeCount}</b><span>Märkte nötig</span></div>
+      </div>
+      ${maxSaving.storeCount > 1 ? `<div class="filter-note">⚠️ Dafür musst du ${maxSaving.storeCount} verschiedene Märkte besuchen.</div>` : ''}
+      <div class="section-label">Aufteilung je Produkt</div>
+      ${maxSaving.breakdown.map(b=>`
+        <div class="menu-item-row">
+          <div class="menu-item-top">
+            <div>
+              <div class="menu-item-name">${escapeHtml(b.item.name)}</div>
+              <div class="menu-item-desc">${b.retailer ? escapeHtml(b.retailer) : 'kein Preis gefunden'}</div>
+            </div>
+            <div class="menu-item-price">${b.price != null ? b.price.toFixed(2)+' €' : '–'}</div>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+}
+
+function renderShoppingOffers(){
+  shoppingContent.innerHTML = `
+    <div class="disclaimer-box"><b>Noch nicht verfügbar:</b> Für Marktguru wurde keine öffentliche API gefunden. Die Architektur (OfferProvider-Schicht, PLZ-Filterung) ist vorbereitet, sobald eine zulässige Datenquelle gefunden oder eine Partnerschaft verfügbar ist.</div>
+  `;
+}
+
+
+
+/* =====================================================================
+   SCOOTER WATCH
+   Lokal gespeicherte Suchalarme (localStorage, kein Backend). Bei jedem
+   Datenabgleich (loadNearby) wird geprueft, ob NEU ein passendes
+   Fahrzeug in Reichweite ist - dabei wird unabhaengig von den
+   Kartenfiltern auf ALLEN geladenen Fahrzeugen geprueft, nicht nur den
+   aktuell angezeigten. Benachrichtigung ueber die Web Notification API,
+   falls erlaubt; sonst ein In-App-Toast als ehrlicher Fallback (echte
+   Push-Benachrichtigungen ausserhalb der geoeffneten App wuerden ein
+   eigenes Backend + Service Worker erfordern, das es hier nicht gibt).
+   ===================================================================== */
+
+const WATCH_KEY = 'combine_watches_v1';
+function loadWatches(){ try{ return JSON.parse(localStorage.getItem(WATCH_KEY) || '[]'); }catch(e){ return []; } }
+function saveWatches(list){ try{ localStorage.setItem(WATCH_KEY, JSON.stringify(list)); }catch(e){} }
+
+const watchOverlay = document.getElementById('watchOverlay');
+const watchBody = document.getElementById('watchBody');
+let watchView = 'list'; // 'list' | 'create'
+let watchDraftProviders = new Set(Object.keys(PROVIDER_META));
+let watchDraftRadius = 500;
+let watchDraftMinCount = 1;
+
+function openWatch(){ watchView = 'list'; renderWatchScreen(); watchOverlay.classList.add('show'); }
+function closeWatch(){ watchOverlay.classList.remove('show'); }
+document.getElementById('watchBtn').addEventListener('click', openWatch);
+watchOverlay.addEventListener('click', (e)=>{ if(e.target === watchOverlay) closeWatch(); });
+
+function renderWatchScreen(){
+  if(watchView === 'create') renderWatchCreate();
+  else renderWatchList();
+}
+
+function renderWatchList(){
+  const watches = loadWatches();
+  watchBody.innerHTML = `
+    <div class="detail-top">
+      <div style="flex:1;">
+        <div class="detail-title">Scooter Watch</div>
+        <div class="detail-sub">Benachrichtigung, sobald ein passender Scooter in der Nähe auftaucht</div>
+      </div>
+      <div class="detail-close" id="watchCloseX">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div id="watchListItems" style="margin-top:12px;"></div>
+    <div class="detail-btn" id="watchAddBtn" style="margin-top:14px;">+ Neue Watch</div>
+  `;
+  watchBody.querySelector('#watchCloseX').addEventListener('click', closeWatch);
+  watchBody.querySelector('#watchAddBtn').addEventListener('click', ()=>{
+    watchDraftProviders = new Set(Object.keys(PROVIDER_META));
+    watchDraftRadius = 500;
+    watchDraftMinCount = 1;
+    watchView = 'create';
+    renderWatchScreen();
+  });
+
+  const list = watchBody.querySelector('#watchListItems');
+  if(!watches.length){
+    list.innerHTML = '<div class="empty">Noch keine Watch angelegt.</div>';
+    return;
+  }
+  watches.forEach(w=>{
+    const providerNames = w.providers.map(k => PROVIDER_META[k]?.name).filter(Boolean).join(', ') || 'keine Anbieter';
+    const row = document.createElement('div');
+    row.className = 'compare-row';
+    row.innerHTML = `
+      <div class="compare-top">
+        <div class="compare-name">${metersLabel(w.radiusM)} · ${escapeHtml(providerNames)}</div>
+      </div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Benachrichtigen ab ${w.minCount || 1} Scooter${(w.minCount||1) > 1 ? 'n' : ''}</div>
+      <div style="font-size:11.5px; color:${w.active ? 'var(--ok)' : 'var(--ink-soft)'}; font-weight:600; margin-bottom:10px;">${w.active ? '● Aktiv' : '○ Pausiert'}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div class="goto" data-act="toggle" style="cursor:pointer;">${w.active ? 'Pausieren' : 'Aktivieren'}</div>
+        <div class="goto" data-act="delete" style="cursor:pointer;">Löschen</div>
+      </div>
+    `;
+    row.querySelector('[data-act="toggle"]').addEventListener('click', ()=>{
+      const all = loadWatches();
+      const found = all.find(x=>x.id===w.id);
+      if(found) found.active = !found.active;
+      saveWatches(all);
+      renderWatchList();
+    });
+    row.querySelector('[data-act="delete"]').addEventListener('click', ()=>{
+      saveWatches(loadWatches().filter(x=>x.id!==w.id));
+      renderWatchList();
+    });
+    list.appendChild(row);
+  });
+}
+
+function renderWatchCreate(){
+  watchBody.innerHTML = `
+    <div class="detail-top">
+      <div class="detail-close" id="watchBackBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg></div>
+      <div style="flex:1;">
+        <div class="detail-title">Neue Watch</div>
+      </div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Anbieter</div>
+      <div id="watchProviderList"></div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Radius <span id="watchRadiusValue"></span></div>
+      <input type="range" id="watchRadiusSlider" class="filter-slider" min="100" max="2000" step="50">
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Benachrichtigen ab</div>
+      <div class="segmented" id="watchCountSeg">
+        ${[1,2,3,5,10].map(n=>`<div class="segmented-opt" data-n="${n}">${n}</div>`).join('')}
+      </div>
+      <div class="filter-note">Erst wenn mindestens diese Anzahl passender Scooter gleichzeitig in Reichweite ist.</div>
+    </div>
+    <div class="detail-btn" id="watchSaveBtn" style="margin-top:6px;">Watch aktivieren</div>
+  `;
+  watchBody.querySelector('#watchBackBtn').addEventListener('click', ()=>{ watchView='list'; renderWatchScreen(); });
+
+  const provList = watchBody.querySelector('#watchProviderList');
+  Object.entries(PROVIDER_META).forEach(([key,p])=>{
+    const isOn = watchDraftProviders.has(key);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `${logoHtml(key,p.color)}<div class="rowinfo"><div class="name">${p.name}</div></div><div class="toggle ${isOn?'on':''}" data-key="${key}"><div class="knob"></div></div>`;
+    row.querySelector('.toggle').addEventListener('click', ()=>{
+      if(watchDraftProviders.has(key)) watchDraftProviders.delete(key); else watchDraftProviders.add(key);
+      renderWatchCreate();
+    });
+    provList.appendChild(row);
+  });
+
+  const radiusSlider2 = watchBody.querySelector('#watchRadiusSlider');
+  const radiusValue2 = watchBody.querySelector('#watchRadiusValue');
+  radiusSlider2.value = watchDraftRadius;
+  radiusValue2.textContent = metersLabel(watchDraftRadius);
+  radiusSlider2.addEventListener('input', ()=>{
+    watchDraftRadius = Number(radiusSlider2.value);
+    radiusValue2.textContent = metersLabel(watchDraftRadius);
+  });
+
+  const countSeg = watchBody.querySelector('#watchCountSeg');
+  countSeg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', Number(opt.dataset.n) === watchDraftMinCount);
+    opt.addEventListener('click', ()=>{
+      watchDraftMinCount = Number(opt.dataset.n);
+      renderWatchCreate();
+    });
+  });
+
+  watchBody.querySelector('#watchSaveBtn').addEventListener('click', ()=>{
+    if(watchDraftProviders.size === 0) return;
+    const all = loadWatches();
+    all.push({
+      id: 'watch_' + Date.now(),
+      providers: [...watchDraftProviders],
+      radiusM: watchDraftRadius,
+      minCount: watchDraftMinCount,
+      active: true,
+      aboveThreshold: false // Kante: erst benachrichtigen, wenn dies von false auf true wechselt
+    });
+    saveWatches(all);
+    if('Notification' in window && Notification.permission === 'default'){
+      Notification.requestPermission();
+    }
+    watchView = 'list';
+    renderWatchScreen();
+  });
+}
+
+/* ---------- Kleiner Toast als Fallback, wenn Web-Notifications nicht
+   erlaubt/verfuegbar sind (App muss dafuer geoeffnet sein). ---------- */
+function showToast(title, body){
+  const el = document.createElement('div');
+  el.style.cssText = 'position:absolute; left:14px; right:14px; top:14px; z-index:300; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; box-shadow:0 10px 24px rgba(0,0,0,.4); transform:translateY(-12px); opacity:0; transition:transform .25s var(--ease-out), opacity .25s;';
+  el.innerHTML = `<div style="font-family:var(--font-display); font-weight:700; font-size:13px;">${escapeHtml(title)}</div><div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(body)}</div>`;
+  document.querySelector('.phone').appendChild(el);
+  requestAnimationFrame(()=>{ el.style.transform='translateY(0)'; el.style.opacity='1'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-12px)'; setTimeout(()=> el.remove(), 300); }, 4500);
+}
+
+function notifyScooterFound(watch, matchCount, nearest){
+  const title = '🛴 Scooter verfügbar';
+  const plural = matchCount > 1 ? 'Scooter sind' : 'Scooter ist';
+  const body = watch.minCount > 1
+    ? `${matchCount} passende ${plural} jetzt in deinem Watch-Radius verfügbar (mind. ${watch.minCount} gewünscht).`
+    : `Ein Scooter von ${PROVIDER_META[nearest.provider].name} ist jetzt ${metersLabel(nearest.dist)} von dir entfernt.`;
+  if('Notification' in window && Notification.permission === 'granted'){
+    try{ new Notification(title, { body }); return; }catch(e){}
+  }
+  showToast(title, body);
+}
+
+/* Wird nach jedem Laden neuer Fahrzeugdaten aufgerufen (siehe loadNearby).
+   Prueft unabhaengig von den Kartenfiltern auf ALLEN geladenen Fahrzeugen.
+   Kantengetriggert: benachrichtigt nur beim UEBERSCHREITEN des
+   Schwellenwerts (von "darunter" zu "darueber/gleich") - eine erneute
+   Benachrichtigung ist erst moeglich, nachdem der Bestand wieder unter
+   den Schwellenwert gefallen und danach erneut gestiegen ist. */
+function checkScooterWatches(){
+  if(!userPos) return;
+  const watches = loadWatches();
+  if(!watches.length) return;
+  let changed = false;
+  watches.forEach(w=>{
+    if(!w.active) return;
+    const minCount = w.minCount || 1;
+    const matches = lastNearbyVehicles
+      .filter(v => w.providers.includes(v.provider) && v.dist != null && v.dist <= w.radiusM)
+      .sort((a,b)=> a.dist - b.dist);
+
+    const isAbove = matches.length >= minCount;
+    const wasAbove = !!w.aboveThreshold;
+
+    if(isAbove && !wasAbove){
+      notifyScooterFound(w, matches.length, matches[0]);
+    }
+    if(isAbove !== wasAbove){
+      w.aboveThreshold = isAbove;
+      changed = true;
+    }
+  });
+  if(changed) saveWatches(watches);
+}
+
+
+
+/* =====================================================================
+   ROUTENPLANUNG
+   Zielsuche: Nominatim (OpenStreetMap) - dieselbe Quelle, die die App
+   bereits fuers Reverse-Geocoding des Stadtnamens nutzt.
+   Routing: OSRM oeffentlicher Demo-Server (router.project-osrm.org) -
+   eine der bekanntesten Open-Source-Routing-Loesungen, hier ohne
+   eigenen API-Key ueber den kostenlosen Demo-Endpunkt genutzt.
+   EHRLICHER HINWEIS: Der OSRM-Demo-Server bietet kein eigenes
+   "E-Scooter"-Profil an. Verwendet wird das "cycling"-Profil als
+   naeherungsweise beste verfuegbare Annahme fuer eine Scooter-Fahrt
+   (bevorzugt Rad-/Nebenwege) - das ist eine Annaeherung, keine exakte
+   Scooter-Routenfuehrung. Der Demo-Server ist zudem nur fuer leichte
+   Nutzung/Tests gedacht, nicht fuer produktive Lastspitzen.
+   ===================================================================== */
+
+const OSRM_BASE = 'https://router.project-osrm.org';
+
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+
+/* War versehentlich aus dem Code verschwunden (Ursache des "keine Route
+   verfuegbar"-Fehlers fuer wirklich jede Anfrage) - hier wiederhergestellt,
+   zusaetzlich mit einem einmaligen Retry bei HTTP 429 (Rate-Limit des
+   oeffentlichen Demo-Servers), da mehrere Scooter kurz hintereinander
+   verglichen werden. */
+async function fetchOsrmRoute(profile, from, to, _retried){
+  const url = `${OSRM_BASE}/route/v1/${profile}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
+  const res = await fetch(url);
+  if(res.status === 429 && !_retried){
+    await sleep(600);
+    return fetchOsrmRoute(profile, from, to, true);
+  }
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if(json.code !== 'Ok' || !json.routes?.length) throw new Error('keine Route');
+  return json.routes[0];
+}
+
+const routeOverlay = document.getElementById('routeOverlay');
+const routeSearchInput = document.getElementById('routeSearchInput');
+const routeSuggestions = document.getElementById('routeSuggestions');
+const routeResult = document.getElementById('routeResult');
+let routeLayer = L.layerGroup().addTo(map);
+let destMarker = null;
+
+function openRoute(){
+  routeOverlay.classList.add('show');
+  routeSearchInput.value = '';
+  routeSuggestions.innerHTML = '';
+  routeResult.innerHTML = '';
+  setTimeout(()=> routeSearchInput.focus(), 300);
+  if(!userPos){
+    routeSuggestions.innerHTML = '<div class="empty">Ermittle deinen Standort …</div>';
+    locateAndLoad();
+  }
+}
+function closeRoute(){ routeOverlay.classList.remove('show'); }
+
+document.getElementById('routeBtn').addEventListener('click', openRoute);
+document.getElementById('routeClose').addEventListener('click', closeRoute);
+routeOverlay.addEventListener('click', (e)=>{ if(e.target === routeOverlay) closeRoute(); });
+
+let routeSearchTimer = null;
+routeSearchInput.addEventListener('input', ()=>{
+  clearTimeout(routeSearchTimer);
+  const q = routeSearchInput.value.trim();
+  if(q.length < 3){ routeSuggestions.innerHTML = ''; return; }
+  routeSuggestions.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
+  routeSearchTimer = setTimeout(()=> searchDestination(q), 400); // Debounce
+});
+
+async function searchDestination(q){
+  try{
+    let url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=1&limit=5`;
+    if(userPos){
+      // Ergebnisse in der Naehe des Standorts bevorzugen (grosszuegige Box).
+      const d = 0.5;
+      url += `&viewbox=${userPos.lon-d},${userPos.lat+d},${userPos.lon+d},${userPos.lat-d}&bounded=0`;
+    }
+    const res = await fetch(url, { headers: { 'Accept-Language':'de' } });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    renderDestinationSuggestions(results);
+  }catch(err){
+    routeSuggestions.innerHTML = '<div class="empty">Suche gerade nicht möglich.</div>';
+  }
+}
+
+function renderDestinationSuggestions(results){
+  routeSuggestions.innerHTML = '';
+  if(!results.length){
+    routeSuggestions.innerHTML = '<div class="empty">Kein Ziel gefunden.</div>';
+    return;
+  }
+  results.forEach(r=>{
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div class="rowinfo">
+        <div class="name">${escapeHtml(r.name || r.display_name.split(',')[0])}</div>
+        <div class="meta">${escapeHtml(r.display_name)}</div>
+      </div>
+    `;
+    row.addEventListener('click', ()=> selectDestination(r));
+    routeSuggestions.appendChild(row);
+  });
+}
+
+/*
+  EHRLICHER STAND ZUM ROUTING-PROFIL (Analyse vor der Umsetzung):
+  Der oeffentliche OSRM-Demo-Server (router.project-osrm.org) bietet genau
+  drei Profile: "driving", "cycling", "walking". Ein eigenes E-Scooter-
+  Profil gibt es dort nicht, und der Demo-Server erlaubt auch keine
+  benutzerdefinierten Parameter zum gezielten Meiden von Strassenklassen
+  (z.B. "avoid=trunk") - das ginge nur mit einer selbst betriebenen
+  OSRM-Instanz mit eigenem Lua-Routing-Profil, was hier nicht existiert.
+
+  Als bestmoegliche Annaeherung ohne eigenen Routing-Server:
+  1. Route zunaechst mit "cycling" berechnen (kommt einer Scooter-Fahrt am
+     naechsten, bevorzugt i.d.R. Radinfrastruktur).
+  2. Die einzelnen Routenabschnitte (steps) tatsaechlich darauf pruefen,
+     ob eine deutsche Bundesstrasse dabei ist - das laesst sich real aus
+     der von OSRM zurueckgegebenen "ref"-Eigenschaft ablesen (OSM-Tag
+     "ref", z.B. "B27" fuer Bundesstrasse 27).
+  3. Wird eine Bundesstrasse gefunden, wird zusaetzlich eine Route mit dem
+     "walking"-Profil angefragt und stattdessen verwendet (faehrt
+     realistischer nur ueber Wege, auf denen Kfz-Strassen wie
+     Bundesstrassen grundsaetzlich nicht vorkommen).
+  4. Welches Profil am Ende verwendet wurde, wird in der UI transparent
+     angezeigt - es wird nichts als "perfekte Scooter-Route" verkauft,
+     was es nicht ist.
+*/
+const BUNDESSTRASSE_REF = /\bB\s?\d{1,4}\b/i;
+
+function routeContainsBundesstrasse(route){
+  const steps = route.legs?.flatMap(l => l.steps) || [];
+  return steps.some(s => BUNDESSTRASSE_REF.test(s.ref || '') || /Bundesstraße/i.test(s.name || ''));
+}
+
+/* Kapselt die bestehende E-Scooter-Routing-Logik (cycling + Bundesstrasse-
+   Erkennung + walking-Fallback) wiederverwendbar fuer eine beliebige
+   Start->Ziel-Strecke - wird gleich fuer JEDEN verglichenen Scooter einzeln
+   aufgerufen (Scooter->Ziel), nicht mehr nur einmal fuer die ganze Route. */
+async function computeScooterLeg(from, to){
+  let route = await fetchOsrmRoute('cycling', from, to);
+  let usedProfile = 'cycling';
+  if(routeContainsBundesstrasse(route)){
+    try{
+      route = await fetchOsrmRoute('walking', from, to);
+      usedProfile = 'walking';
+    }catch(fallbackErr){ /* bei Rad-Route bleiben, s.u. stillHasBundesstrasse */ }
+  }
+  return { route, usedProfile, stillHasBundesstrasse: usedProfile === 'cycling' && routeContainsBundesstrasse(route) };
+}
+
+const routeLegCache = new Map(); // vermeidet doppelte OSRM-Anfragen bei erneutem Vergleich derselben Kombination
+
+const WALK_CACHE_TTL_MS = 20_000; // Standort/Scooter aendern sich schnell - nur kurz cachen
+const walkLegCache = new Map();
+async function cachedFetchWalk(from, to, cacheKey){
+  const hit = walkLegCache.get(cacheKey);
+  if(hit && Date.now() - hit.at < WALK_CACHE_TTL_MS) return hit.route;
+  const route = await fetchOsrmRoute('walking', from, to);
+  walkLegCache.set(cacheKey, { route, at: Date.now() });
+  return route;
+}
+async function cachedComputeScooterLeg(from, to, cacheKey){
+  if(routeLegCache.has(cacheKey)) return routeLegCache.get(cacheKey);
+  const result = await computeScooterLeg(from, to);
+  routeLegCache.set(cacheKey, result);
+  return result;
+}
+
+const MAX_COMPARE_CANDIDATES = 5; // begrenzt OSRM-Anfragen (oeffentlicher Demo-Server, faire Nutzung)
+let compareCandidates = [];       // zuletzt berechnete Vergleichsergebnisse
+let selectedCompareId = null;
+let currentDest = null;
+
+async function selectDestination(r){
+  routeSuggestions.innerHTML = '';
+  routeSearchInput.value = r.name || r.display_name.split(',')[0];
+  routeResult.innerHTML = '<div class="empty loading-pulse">Scooter werden verglichen …</div>';
+  selectedCompareId = null;
+
+  if(!userPos){
+    routeResult.innerHTML = '<div class="empty">Standort wird noch ermittelt – bitte kurz warten.</div>';
+    return;
+  }
+
+  currentDest = { lat: Number(r.lat), lon: Number(r.lon), label: r.display_name };
+
+  const candidates = [...vehiclesById.values()]
+    .filter(v => v.dist != null)
+    .sort((a,b) => a.dist - b.dist)
+    .slice(0, MAX_COMPARE_CANDIDATES);
+
+  if(!candidates.length){
+    routeResult.innerHTML = '<div class="empty">Keine Scooter in der Nähe zum Vergleichen geladen.</div>';
+    return;
+  }
+
+  // Begrenzte Parallelitaet (2 gleichzeitig) statt strikt nacheinander:
+  // deutlich schneller als eine feste Pause zwischen jedem Kandidaten, aber
+  // immer noch kein Burst von 5+ Anfragen auf einmal gegen den oeffentlichen
+  // OSRM-Server. Ein einzelner fehlgeschlagener Kandidat blockiert die
+  // anderen nicht (try/catch pro Kandidat).
+  const COMPARE_CONCURRENCY = 2;
+  compareCandidates = [];
+  let completed = 0;
+
+  async function compareOne(v){
+    try{
+      const scooterPos = { lat: v.lat, lon: v.lon };
+      const destKey = `${currentDest.lat.toFixed(4)},${currentDest.lon.toFixed(4)}`;
+
+      const walk = await cachedFetchWalk(userPos, scooterPos, `${v.id}|${userPos.lat.toFixed(4)},${userPos.lon.toFixed(4)}`);
+      const leg = await cachedComputeScooterLeg(scooterPos, currentDest, `${v.id}|${destKey}`);
+      const pricing = await getSystemPricing(v.systemId);
+
+      const walkMinutes = Math.round(walk.duration / 60);
+      const rideMinutes = Math.round(leg.route.duration / 60);
+      const totalMinutes = walkMinutes + rideMinutes;
+      const price = pricing && (pricing.unlock != null || pricing.perMin != null)
+        ? (pricing.unlock ?? 0) + (pricing.perMin ?? 0) * rideMinutes
+        : null;
+
+      compareCandidates.push({
+        vehicle: v, walk, leg, pricing, walkMinutes, rideMinutes, totalMinutes, price,
+        walkLatLngs: walk.geometry.coordinates.map(([lon,lat])=>[lat,lon]),
+        rideLatLngs: leg.route.geometry.coordinates.map(([lon,lat])=>[lat,lon])
+      });
+    }catch(err){
+      console.error('Vergleich fehlgeschlagen für Scooter', v.id, err);
+    }
+    completed++;
+    routeResult.innerHTML = `<div class="empty loading-pulse">Scooter werden verglichen … (${completed}/${candidates.length})</div>`;
+  }
+
+  // Einfacher Concurrency-Pool: startet immer neue Kandidaten nach, sobald
+  // einer der laufenden fertig ist, statt in starren Zweier-Batches zu warten.
+  const queue = [...candidates];
+  await Promise.all(
+    Array.from({ length: Math.min(COMPARE_CONCURRENCY, queue.length) }, async () => {
+      while(queue.length) await compareOne(queue.shift());
+    })
+  );
+
+  compareCandidates.sort((a,b)=> a.totalMinutes - b.totalMinutes);
+
+  if(!compareCandidates.length){
+    routeResult.innerHTML = '<div class="empty">Route konnte für keinen Scooter berechnet werden. Anderes Ziel versuchen.</div>';
+    return;
+  }
+  renderScooterComparison();
+}
+
+function renderScooterComparison(){
+  const rows = compareCandidates.map(c=>{
+    const p = PROVIDER_META[c.vehicle.provider];
+    const isSelected = c.vehicle.id === selectedCompareId;
+    const priceLabel = c.price != null ? `ca. ${c.price.toFixed(2)} ${c.pricing.currency || '€'}` : 'nicht verfügbar';
+    return `
+      <div class="compare-row compare-select ${isSelected ? 'selected' : ''}" data-id="${c.vehicle.id}">
+        <div class="compare-top">
+          ${logoHtml(c.vehicle.provider, p.color)}
+          <div class="compare-name">Scooter #${shortScooterRef(c.vehicle.rawId)} · ${p.name}</div>
+          <div class="compare-check">${isSelected ? '✓' : ''}</div>
+        </div>
+        <div class="compare-stats">
+          <div><b>${metersLabel(c.walk.distance)}</b> · ca. ${c.walkMinutes} Min. zu Fuß</div>
+        </div>
+        <div class="compare-stats">
+          <div><b>ca. ${c.totalMinutes} Min.</b> gesamt</div>
+          <div><b>${priceLabel}</b></div>
+        </div>
+        ${c.leg.stillHasBundesstrasse ? '<div class="route-price-note" style="color:var(--err);">Scooter-Route enthält eine Bundesstraße.</div>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  routeResult.innerHTML = `
+    <div class="route-result">
+      <div class="section-label" style="margin-top:0;">Scooter vergleichen</div>
+      ${rows}
+      <div class="detail-btn" id="startNavBtn" style="margin-top:6px; opacity:.4; pointer-events:none;">Scooter auswählen, um zu starten</div>
+      <div class="detail-btn fallback" id="clearRouteBtn" style="margin-top:8px;">Route löschen</div>
+    </div>
+  `;
+
+  routeResult.querySelectorAll('.compare-select').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      selectedCompareId = row.dataset.id;
+      renderScooterComparison();
+    });
+  });
+
+  document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
+    endNavigation();
+    routeLayer.clearLayers();
+    routeResult.innerHTML = '';
+    routeSearchInput.value = '';
+    compareCandidates = [];
+    selectedCompareId = null;
+  });
+
+  const navBtn = document.getElementById('startNavBtn');
+  if(selectedCompareId){
+    navBtn.textContent = 'Navigation starten';
+    navBtn.style.opacity = '1';
+    navBtn.style.pointerEvents = 'auto';
+    navBtn.onclick = ()=>{
+      const chosen = compareCandidates.find(c=>c.vehicle.id===selectedCompareId);
+      if(chosen) startNavigation(chosen);
+    };
+  }
+}
+
+function drawComparisonRoute(chosen){
+  routeLayer.clearLayers();
+  const walkLine = L.polyline(chosen.walkLatLngs, { color:'#8FA0A8', weight:4, opacity:.8, dashArray:'2 10' }).addTo(routeLayer);
+  const rideLine = L.polyline(chosen.rideLatLngs, { color:'#4EA8FF', weight:5, opacity:.9 }).addTo(routeLayer);
+  L.circleMarker([currentDest.lat, currentDest.lon], { radius:8, color:'#0A0E12', weight:2, fillColor:'#4EA8FF', fillOpacity:1 }).addTo(routeLayer);
+  return L.featureGroup([walkLine, rideLine]).getBounds();
+}
+
+
+
+
+
+/* =====================================================================
+   NAVIGATIONSZUSTAND
+   Trennt "normale Kartenansicht" von "Navigation aktiv". Steuert darueber,
+   welche Scooter-Marker sichtbar sind und welcher hervorgehoben wird -
+   rein ueber CSS-Klassen auf dem bereits vorhandenen Marker-DOM-Element
+   (marker._icon), damit nichts neu erzeugt werden muss und die
+   Groessen-/Hervorhebungs-Aenderung weich animiert (siehe .map-pin
+   Transition in der CSS-Sektion). ===================================== */
+
+let navigationActive = false;
+let navScooterId = null;
+const navBanner = document.getElementById('navBanner');
+const navBannerText = document.getElementById('navBannerText');
+
+function applyNavigationVisibility(){
+  markersById.forEach((marker, id)=>{
+    if(!marker._icon) return; // Marker noch nicht gerendert
+    const isNavScooter = navigationActive && id === navScooterId;
+    marker._icon.classList.toggle('nav-hidden', navigationActive && !isNavScooter);
+    marker._icon.classList.toggle('nav-selected', isNavScooter);
+  });
+}
+
+/* Ermittelt echten verfuegbaren Kartenausschnitt anhand der TATSAECHLICH
+   gerenderten Hoehen von Kopf-/Navigationsleiste (und optional Banner) -
+   funktioniert dadurch automatisch auf allen Displaygroessen, statt feste
+   Pixelwerte zu raten. */
+function computeMapSafePadding(extraTopPx = 0){
+  const topbarH = document.querySelector('.topbar').offsetHeight;
+  const navH = document.querySelector('.nav').offsetHeight;
+  return {
+    paddingTopLeft: L.point(24, topbarH + 16 + extraTopPx),
+    paddingBottomRight: L.point(24, navH + 16)
+  };
+}
+
+function showNavBanner(detailText){
+  navBannerText.textContent = `Navigation aktiv · ${detailText}`;
+  navBanner.classList.add('show');
+}
+function hideNavBanner(){ navBanner.classList.remove('show'); }
+document.getElementById('navBannerEnd').addEventListener('click', ()=>{
+  endNavigation();
+  routeLayer.clearLayers();
+  routeResult.innerHTML = '';
+  routeSearchInput.value = '';
+});
+
+/* Anfangs-Peilung (Kompassrichtung) der Fahrtstrecke, damit die Karte sich
+   beim Navigationsstart in Fahrtrichtung eindrehen kann. Nimmt einen Punkt
+   etwas weiter vorne auf der Linie (nicht nur den direkten Nachbarpunkt),
+   damit die Richtung nicht durch GPS-/Wegpunkt-Rauschen verfaelscht wird. */
+function computeBearing(lat1, lon1, lat2, lon2){
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const φ1 = toRad(lat1), φ2 = toRad(lat2), Δλ = toRad(lon2 - lon1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+function initialHeadingOf(latlngs){
+  if(!latlngs || latlngs.length < 2) return null;
+  const start = latlngs[0];
+  const ahead = latlngs[Math.min(3, latlngs.length - 1)];
+  return computeBearing(start[0], start[1], ahead[0], ahead[1]);
+}
+
+const navInfoPanel = document.getElementById('navInfoPanel');
+
+/* Wird einmalig beim Start der Navigation berechnet (kein Live-Tracking der
+   Position waehrend der Fahrt - dafuer waere kontinuierliches GPS-Tracking
+   noetig, das diese App bisher nicht implementiert). */
+function renderNavInfoPanel(chosen){
+  const now = new Date();
+  const arrival = new Date(now.getTime() + chosen.totalMinutes * 60000);
+  const arrivalLabel = arrival.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  const totalKm = (chosen.walk.distance/1000 + chosen.leg.route.distance/1000).toFixed(1);
+
+  navInfoPanel.innerHTML = `
+    <div class="nav-info-stats">
+      <div class="nav-info-stat"><b>${chosen.totalMinutes} Min.</b><span>Fahrtdauer</span></div>
+      <div class="nav-info-stat"><b>${arrivalLabel}</b><span>Ankunft ca.</span></div>
+      <div class="nav-info-stat"><b>${totalKm} km</b><span>Strecke</span></div>
+    </div>
+    <div class="filter-note">Einmalig zu Beginn der Navigation berechnet – die App verfolgt deine Position während der Fahrt nicht live nach.</div>
+  `;
+}
+
+function startNavigation(chosen){
+  navigationActive = true;
+  navScooterId = chosen.vehicle.id;
+
+  const bounds = drawComparisonRoute(chosen);
+  const heading = initialHeadingOf(chosen.walkLatLngs) ?? initialHeadingOf(chosen.rideLatLngs);
+
+  // Alles gemeinsam anstossen (gleicher Funktionsaufruf), damit es sich als
+  // eine zusammenhaengende Bewegung anfuehlt: Marker-Fade/Highlight per CSS-
+  // Transition, Panel-Wechsel, Banner-Einblendung, Kartenanimation - alle
+  // praktisch gleichzeitig gestartet statt nacheinander.
+  applyNavigationVisibility();
+  closeRoute(); // Bottom-Sheet der Routenplanung schliesst, Karte wird sichtbar
+  scooterList.style.display = 'none';
+  navInfoPanel.style.display = 'block';
+  renderNavInfoPanel(chosen);
+  if(!sheet.classList.contains('expanded')) sheet.classList.add('expanded'); // Panel direkt sichtbar, nicht nur als Streifen
+
+  const priceLabel = chosen.price != null ? `ca. ${chosen.price.toFixed(2)} ${chosen.pricing.currency || '€'}` : 'Preis nicht verfügbar';
+  showNavBanner(`${chosen.walkMinutes} Min. zu Fuß + ${chosen.rideMinutes} Min. Fahrt · ${priceLabel}`);
+
+  // Statt die komplette Route einzupassen, jetzt eng auf den Nutzer zoomen
+  // und in Fahrtrichtung eindrehen - wie bei aktiver Turn-by-Turn-Navigation.
+  map.flyTo([userPos.lat, userPos.lon], 18, { duration:0.9, easeLinearity:0.25 });
+  if(ROTATE_SUPPORTED && heading != null) map.setBearing(heading);
+}
+
+function endNavigation(){
+  if(!navigationActive) return;
+  navigationActive = false;
+  navScooterId = null;
+  applyNavigationVisibility();
+  hideNavBanner();
+  navInfoPanel.style.display = 'none';
+  scooterList.style.display = '';
+  if(ROTATE_SUPPORTED) map.setBearing(0); // wieder nach Norden ausrichten
+}
+
+/* =====================================================================
+   GEOGRAFISCHE VORFILTERUNG DER SYSTEME
+
+   getRelevantSystems() liefert ALLE Systeme in ganz Baden-Wuerttemberg
+   (und ein paar Grenzstaedten), die zu einem erkannten Anbieter gehoeren -
+   das war bisher der Performance-Flaschenhals, weil bei jedem Laden auch
+   weit entfernte Systeme mit abgefragt wurden.
+
+   Hier wird jedes System anhand des in seiner system_id enthaltenen
+   Stadtnamens (z.B. "dott_tubingen" -> "tubingen") einer echten Koordinate
+   zugeordnet - zunaechst ueber eine feste Liste bekannter Staedte (kein
+   Netzwerk noetig), sonst per einmaligem Nominatim-Lookup mit dauerhaftem
+   Cache (localStorage, Stadt-Koordinaten aendern sich nicht). Danach
+   werden nur Systeme innerhalb eines grosszuegigen Umkreises um den
+   Nutzer tatsaechlich abgefragt.
+
+   WICHTIG, ehrlich gesagt: Das erweitert die Abdeckung auf ganz
+   Baden-Wuerttemberg (den tatsaechlichen Geltungsbereich von MobiData BW),
+   nicht auf ganz Deutschland. MobiData BW ist eine Landesplattform des
+   Landes Baden-Wuerttemberg - andere Bundeslaender sind darin nicht
+   enthalten. Fuer echte bundesweite Abdeckung braeuchte es zusaetzliche
+   Datenquellen je Region, die ich bisher nicht verifiziert habe.
+   ===================================================================== */
+
+// Bekannte Staedte, die in den bisher gesichteten System-IDs vorkommen -
+// deckt den Normalfall ohne Netzwerk-Roundtrip ab. Alles Weitere faellt auf
+// Nominatim zurueck (siehe geocodeCityToken).
+const KNOWN_CITY_COORDS = {
+  berlin:[52.5200,13.4050], hamburg:[53.5511,9.9937], koeln:[50.9375,6.9603],
+  muenchen:[48.1351,11.5820], stuttgart:[48.7758,9.1829], frankfurt:[50.1109,8.6821],
+  duesseldorf:[51.2277,6.7735], karlsruhe:[49.0069,8.4037], freiburg:[47.9990,7.8421],
+  mannheim:[49.4875,8.4660], heidelberg:[49.3988,8.6724], ulm:[48.4011,9.9876],
+  reutlingen:[48.4914,9.2043], tubingen:[48.5216,9.0576], tuebingen:[48.5216,9.0576],
+  heilbronn:[49.1427,9.2109], boblingen:[48.6850,9.0106], bueblingen:[48.6850,9.0106],
+  ludwigsburg:[48.8974,9.1916], friedrichshafen:[47.6559,9.4794], lindau:[47.5460,9.6857],
+  konstanz:[47.6603,9.1758], kaiserslautern:[49.4401,7.7491], saarbruecken:[49.2402,6.9969],
+  darmstadt:[49.8728,8.6512], basel:[47.5596,7.5886], bregenz:[47.5031,9.7471],
+  stgallen:[47.4245,9.3767], zuerich:[47.3769,8.5417], zurich:[47.3769,8.5417],
+  biel:[47.1368,7.2468], grenchen:[47.1936,7.3959], kloten:[47.4506,8.5836],
+  schaffhausen:[47.6979,8.6308], oberhausen:[51.4963,6.8638], opfikon:[47.4310,8.5730],
+  uster:[47.3469,8.7203], paris:[48.8566,2.3522], brussels:[50.8503,4.3517],
+  chalonsenchampagne:[48.9564,4.3634], sarreguemines:[49.1097,7.0645]
+};
+
+function normalizeCityKey(s){
+  return s.toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/[^a-z]/g, '');
+}
+
+function extractCityToken(systemId, provider){
+  return systemId.replace(new RegExp('^' + provider + '_'), '').replace(/_/g, ' ').trim();
+}
+
+const CITY_GEOCACHE_KEY = 'combine_city_geocache_v1';
+let cityGeocache = (()=>{ try{ return JSON.parse(localStorage.getItem(CITY_GEOCACHE_KEY) || '{}'); }catch(e){ return {}; } })();
+function saveCityGeocache(){ try{ localStorage.setItem(CITY_GEOCACHE_KEY, JSON.stringify(cityGeocache)); }catch(e){} }
+
+async function geocodeCityToken(token){
+  const words = token.split(/\s+/).map(normalizeCityKey).filter(Boolean);
+  for(const w of words){
+    if(KNOWN_CITY_COORDS[w]) return { lat: KNOWN_CITY_COORDS[w][0], lon: KNOWN_CITY_COORDS[w][1] };
+  }
+  const cacheKey = normalizeCityKey(token);
+  if(cityGeocache[cacheKey] !== undefined) return cityGeocache[cacheKey];
+
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(token)}&limit=1`, { headers: { 'Accept-Language':'de' } });
+    const results = await res.json();
+    const coord = results.length ? { lat:Number(results[0].lat), lon:Number(results[0].lon) } : null;
+    cityGeocache[cacheKey] = coord;
+    saveCityGeocache();
+    return coord;
+  }catch(err){
+    return null; // kein Cache-Eintrag bei Netzwerkfehler - naechstes Mal erneut versuchen
+  }
+}
+
+const NEARBY_SYSTEM_RADIUS_M = 200_000; // grosszuegiger Puffer oberhalb des max. Anzeige-Radius (150 km)
+
+async function getNearbySystems(){
+  const all = await getRelevantSystems();
+  if(!userPos) return all; // ohne Standort kein sinnvoller Filter moeglich
+
+  const withDistance = await Promise.all(all.map(async s=>{
+    const token = extractCityToken(s.id, s.provider);
+    const coord = await geocodeCityToken(token);
+    // Konnte die Stadt nicht zugeordnet werden: sicherheitshalber NICHT
+    // ausschliessen, statt ein System faelschlich zu verstecken.
+    const dist = coord ? haversineMeters(userPos.lat, userPos.lon, coord.lat, coord.lon) : null;
+    return { ...s, dist };
+  }));
+
+  return withDistance.filter(s => s.dist == null || s.dist <= NEARBY_SYSTEM_RADIUS_M);
+}
+
+async function getRelevantSystems(){
+  if(systemsCache) return systemsCache;
+  const res = await fetch(MANIFEST_URL);
+  const json = await res.json();
+  const all = json.data.datasets.map(d => d.system_id);
+  systemsCache = all
+    .map(id => ({ id, provider: providerFromSystemId(id) }))
+    .filter(s => s.provider);
+  return systemsCache;
+}
+
+function readBatteryPercent(b){
+  // Verschiedene Anbieter/GBFS-Versionen benennen das Feld leicht anders.
+  // Es werden ausschliesslich tatsaechlich vom Feed gelieferte Werte
+  // verwendet - kein Anbieter bekommt einen erfundenen/geschaetzten Wert.
+  const raw = b.current_fuel_percent ?? b.fuel_percent ?? b.battery_percent ?? b.current_range_percent;
+  if(raw == null) return null;
+  const num = Number(raw);
+  if(Number.isNaN(num)) return null;
+  const pct = num <= 1 ? num * 100 : num; // 0-1 vs. bereits 0-100
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
+async function fetchSystemVehicles(systemId, provider){
+  try{
+    const res = await fetch(feedUrl(systemId, 'free_bike_status'));
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const bikes = (json.data && (json.data.bikes || json.data.vehicles)) || [];
+    return bikes
+      .filter(b => b.lat && b.lon)
+      .map(b => ({
+        id: `${provider}_${b.bike_id ?? b.vehicle_id ?? b.id}`,
+        rawId: String(b.bike_id ?? b.vehicle_id ?? b.id ?? ''),
+        provider,
+        systemId,
+        lat: b.lat, lon: b.lon,
+        battery: readBatteryPercent(b),
+        rangeMeters: b.current_range_meters != null ? Number(b.current_range_meters) : null,
+        rentalUri: b.rental_uris || null
+      }));
+  }catch(err){
+    return [];
+  }
+}
+
+/* ---------- Preisangaben je System (echter GBFS-Feed system_pricing_plans) ---------- */
+const pricingCache = {};
+async function getSystemPricing(systemId){
+  if(!systemId) return null;
+  if(pricingCache[systemId] !== undefined) return pricingCache[systemId];
+  try{
+    const res = await fetch(feedUrl(systemId, 'system_pricing_plans'));
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const plans = json?.data?.plans || [];
+    const plan = plans[0] || null;
+    if(!plan){ pricingCache[systemId] = null; return null; }
+    const perMinSegment = Array.isArray(plan.per_min_pricing) ? plan.per_min_pricing[0] : null;
+    const pricing = {
+      currency: plan.currency || null,
+      unlock: plan.price != null ? Number(plan.price) : null,
+      perMin: perMinSegment?.rate != null ? Number(perMinSegment.rate) : null
+    };
+    pricingCache[systemId] = pricing;
+    return pricing;
+  }catch(err){
+    pricingCache[systemId] = null;
+    return null;
+  }
+}
+
+function renderList(vehicles){
+  scooterList.innerHTML = '';
+  if(!vehicles.length){
+    scooterList.innerHTML = activeProviders.size === 0
+      ? '<div class="empty">Kein Anbieter ausgewählt – wähle unter „Anbieter" mindestens einen aus.</div>'
+      : `<div class="empty">Keine Scooter im Umkreis von ${(maxRadiusM/1000).toFixed(0)} km gefunden.</div>`;
+    return;
+  }
+  vehicles.slice(0, 60).forEach(v=>{
+    const p = PROVIDER_META[v.provider];
+    const dl = distLabel(v);
+    const meta = [dl ? dl + ' entfernt' : null, v.battery !== null ? v.battery + '% Akku' : null].filter(Boolean).join(' · ');
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.id = v.id;
+    row.innerHTML = `
+      ${logoHtml(v.provider, p.color)}
+      <div class="rowinfo">
+        <div class="name">${p.name} Scooter</div>
+        <div class="meta">${meta || 'Details unbekannt'}</div>
+      </div>
+      <div class="goto">Auswählen</div>
+    `;
+    row.addEventListener('click', ()=> selectScooter(row.dataset.id));
+    scooterList.appendChild(row);
+  });
+}
+
+const mapPinIconCache = {};
+function mapPinIcon(provider){
+  if(mapPinIconCache[provider]) return mapPinIconCache[provider];
+  const p = PROVIDER_META[provider];
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="map-pin" style="background:${p.color}">${LOGO_SVG[provider]}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+  mapPinIconCache[provider] = icon;
+  return icon;
+}
+
+const navPinIconCache = {};
+function mapPinIconHighlighted(provider){
+  if(navPinIconCache[provider]) return navPinIconCache[provider];
+  const p = PROVIDER_META[provider];
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="map-pin nav-highlight" style="background:${p.color}">${LOGO_SVG[provider]}</div>`,
+    iconSize: [33, 33],
+    iconAnchor: [16.5, 16.5],
+    popupAnchor: [0, -16.5]
+  });
+  navPinIconCache[provider] = icon;
+  return icon;
+}
+
+function passesPriceFilter(v){
+  if(maxPricePerMin == null) return true; // Preisfilter deaktiviert
+  const pricing = pricingCache[v.systemId];
+  if(!pricing || pricing.perMin == null) return true; // unbekannter Preis wird nicht ausgeschlossen
+  return pricing.perMin <= maxPricePerMin;
+}
+
+let markersById = new Map();
+
+/* ---------- Stadtname zum Standort (echtes Reverse-Geocoding via OSM/Nominatim) ---------- */
+let cityLookupToken = 0;
+let userCityName = null;
+async function lookupCityName(lat, lon){
+  const token = ++cityLookupToken; // verwirft veraltete Antworten bei schnellem erneutem Orten
+  cityLabel.textContent = 'Ort wird ermittelt …';
+  try{
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language':'de' } });
+    if(token !== cityLookupToken) return;
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const a = json.address || {};
+    const city = a.city || a.town || a.village || a.municipality || a.county || null;
+    cityLabel.textContent = city || '';
+    userCityName = city || null;
+  }catch(err){
+    if(token === cityLookupToken){ cityLabel.textContent = ''; userCityName = null; }
+  }
+}
+
+/* ---------- Fester Nahbereich fuer die gruene Statuszeile: 1 km,
+   UNABHAENGIG vom im Filter eingestellten Anzeige-Radius. ---------- */
+const NEARBY_FIXED_RADIUS_M = 1000;
+
+function renderVehicles(vehicles){
+  const filtered = vehicles.filter(v =>
+    activeProviders.has(v.provider) &&
+    (userPos ? (v.dist != null && v.dist <= maxRadiusM) : true) &&
+    passesPriceFilter(v)
+  );
+
+  vehiclesById = new Map(filtered.map(v => [v.id, v]));
+
+  // Diffing statt Clear+Neuaufbau: bestehende Marker bleiben erhalten und
+  // werden nur bewegt, damit die Karte beim Filtern/Aktualisieren nicht
+  // sichtbar flackert.
+  const nextIds = new Set(filtered.map(v => v.id));
+  if(navigationActive && navScooterId) nextIds.add(navScooterId); // waehrend Navigation nie entfernen
+  for(const [id, marker] of markersById){
+    if(!nextIds.has(id)){
+      scooterLayer.removeLayer(marker);
+      markersById.delete(id);
+    }
+  }
+  filtered.forEach(v=>{
+    let marker = markersById.get(v.id);
+    if(marker){
+      marker.setLatLng([v.lat, v.lon]);
+    }else{
+      marker = L.marker([v.lat, v.lon], { icon: mapPinIcon(v.provider) });
+      marker.on('click', ()=> selectScooter(v.id));
+      marker.addTo(scooterLayer);
+      markersById.set(v.id, marker);
+    }
+  });
+  applyNavigationVisibility();
+
+  const nearbyFixedCount = userPos
+    ? lastNearbyVehicles.filter(v => activeProviders.has(v.provider) && v.dist != null && v.dist <= NEARBY_FIXED_RADIUS_M).length
+    : null;
+
+  if(userPos && filtered.length === 0){
+    setStatus(activeProviders.size === 0 ? 'Keine Anbieter ausgewählt.' : 'Keine Scooter im eingestellten Radius gefunden.', 'err');
+  }else{
+    setStatus(userPos ? `${nearbyFixedCount} Scooter in meiner Nähe` : `${filtered.length} Scooter geladen`, 'live');
+  }
+  renderList(filtered);
+}
+
+async function loadNearby(){
+  setStatus('Suche läuft …');
+  scooterList.innerHTML = '<div class="empty loading-pulse">Suche läuft …</div>';
+
+  const systems = await getNearbySystems();
+
+  const results = await Promise.all(systems.map(s => fetchSystemVehicles(s.id, s.provider)));
+  let vehicles = results.flat();
+
+  if(userPos){
+    vehicles.forEach(v=> v.dist = haversineMeters(userPos.lat, userPos.lon, v.lat, v.lon));
+    vehicles.sort((a,b)=> a.dist - b.dist);
+  }
+
+  // Preise fuer alle betroffenen Systeme im Hintergrund laden, damit der
+  // Preisfilter direkt nutzbar ist, sobald der Nutzer ihn aktiviert.
+  const distinctSystemIds = [...new Set(vehicles.map(v => v.systemId))];
+  Promise.all(distinctSystemIds.map(getSystemPricing)).then(()=>{
+    renderVehicles(lastNearbyVehicles); // Preise nachtraeglich anwenden, falls Filter aktiv ist
+  });
+
+  lastNearbyVehicles = vehicles;
+  renderVehicles(lastNearbyVehicles);
+  checkScooterWatches();
+  // Bewusst KEIN automatisches Aus-/Einzoomen mehr auf alle gefundenen
+  // Scooter hier - die Karte soll beim Standort bleiben (siehe flyToUser
+  // in locateAndLoad), nicht bei jedem Ladevorgang neu herausspringen.
+}
+
+const INITIAL_ZOOM_RADIUS_M = 200;
+function flyToUser(lat, lon){
+  // Feste 200m-Ansicht um den Standort statt einer Zoomstufe, die je nach
+  // Breitengrad/Bildschirmgroesse unterschiedlich wirkt.
+  const bounds = L.latLng(lat, lon).toBounds(INITIAL_ZOOM_RADIUS_M * 2);
+  map.flyToBounds(bounds, { duration:1.1 });
+}
+
+let locating = false;
+
+/* Behebt den Fall, dass "Einkauf" schon geoeffnet wurde, BEVOR Standort/
+   Stadtname ermittelt waren - die Seite blieb sonst dauerhaft auf ihrem
+   allerersten (leeren) Zustand stehen, weil sie sich nicht von selbst
+   aktualisiert. Wird nach jeder erfolgreichen Standort-/Stadtermittlung
+   aufgerufen. */
+async function refreshShoppingMarketsIfVisible(){
+  if(!shoppingScreen.classList.contains('show')) return;
+  await ensureNearbyMarkets(true); // erneut versuchen, jetzt mit bekanntem Standort/Stadtname
+  if(shoppingView === 'home') renderShoppingHome();
+}
+
+function locateAndLoad(){
+  if(!navigator.geolocation){
+    setStatus('Standortzugriff nicht verfügbar.', 'err');
+    return;
+  }
+  if(locating) return; // verhindert ueberlappende Anfragen bei mehrfachem Tippen
+  locating = true;
+  setStatus('Ermittle deinen Standort …');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    locating = false;
+    const { latitude, longitude } = pos.coords;
+    userPos = { lat: latitude, lon: longitude };
+    placeUserMarker(latitude, longitude);
+    flyToUser(latitude, longitude);
+    loadNearby();
+    // Nutzer hat aktiv seinen Standort aktualisiert -> eine per Städtesuche
+    // gesetzte Wunschstadt (falls vorhanden) verwerfen und wieder auf die
+    // Supermärkte in der tatsächlichen Umgebung umschalten.
+    marketsCityOverride = null;
+    marketsLoaded = false;
+    lookupCityName(latitude, longitude).then(refreshShoppingMarketsIfVisible);
+  }, ()=>{
+    locating = false;
+    setStatus('Standortzugriff nicht erlaubt – tippe erneut auf das Standort-Symbol, sobald du ihn freigegeben hast.', 'err');
+  }, { enableHighAccuracy:true, timeout:8000 });
+}
+
+/* ---------- Generischer Distanz-Formatter (wird von Karte UND Essen genutzt) ---------- */
+function metersLabel(m){
+  if(m == null) return null;
+  return m < 950 ? Math.round(m/10)*10 + ' m' : (m/1000).toFixed(1) + ' km';
+}
+
+/* =====================================================================
+   ESSEN / FOOD-VERGLEICH
+
+   Datenquellen-Hinweis (siehe Chat-Analyse): Fuer Wolt, Uber Eats und
+   Lieferando existiert KEINE offizielle, oeffentlich zugaengliche API
+   fuer Restaurant-/Menue-Suche durch Drittanbieter-Apps:
+   - Wolt: die frueher genutzten consumer-api.wolt.com / restaurant-
+     api.wolt.com Endpunkte liefern inzwischen HTTP 410 Gone.
+   - Uber Eats: die "Marketplace API" ist nur fuer Restaurant-Partner
+     (eigene Filialen verwalten), erfordert schriftliche Freigabe von
+     Uber und ist nicht fuer Restaurantsuche durch Dritte gedacht.
+   - Lieferando (Just Eat Takeaway): keine oeffentliche API gefunden.
+   Alles was auffindbar war, sind kommerzielle, als "unofficial"
+   gekennzeichnete Scraper-Dienste - genau das soll hier NICHT
+   nachgebaut werden.
+
+   Deshalb: MockFoodProvider je Anbieter, klar als Demo-Daten markiert
+   (siehe disclaimer-box in der UI). Die Provider-Schnittstelle ist so
+   geschnitten, dass ein MockFoodProvider jederzeit durch eine echte,
+   offiziell freigegebene Partner-Implementierung ersetzt werden kann,
+   ohne den Rest der App (Matching, Sortierung, UI) anzufassen.
+
+   Internes Schema (siehe Kommentare) entspricht der Vorgabe:
+   Restaurant { id, provider, providerRestaurantId, name, image,
+     cuisineTypes, rating, distance, deliveryTime, deliveryFee,
+     minimumOrder, isOpen, offers, menu, deepLink }
+   MenuItem { id, provider, providerItemId, restaurantId, name,
+     description, image, price, originalPrice, discount, available,
+     options, deepLink }
+   Offer { id, title, description, discount, originalPrice,
+     finalPrice, conditions, deepLink }
+   ===================================================================== */
+
+const FOOD_PROVIDER_META = {
+  wolt:       { name:'Wolt',       color:'#00C2E8', homepage:'https://wolt.com' },
+  ubereats:   { name:'Uber Eats',  color:'#06C167', homepage:'https://www.ubereats.com' },
+  lieferando: { name:'Lieferando', color:'#FF8000', homepage:'https://www.lieferando.de' }
+};
+
+/* ---------- Provider-Interface ---------- */
+class FoodProvider{
+  constructor(key){ this.key = key; }
+  /** @returns {Promise<object[]>} rohe Restaurant-Objekte im internen Schema */
+  async searchRestaurants(userPos, query, filters){ throw new Error(`${this.key}: searchRestaurants nicht implementiert`); }
+  async getRestaurant(providerRestaurantId){ throw new Error(`${this.key}: getRestaurant nicht implementiert`); }
+  async getMenu(providerRestaurantId){ throw new Error(`${this.key}: getMenu nicht implementiert`); }
+  async getOffers(providerRestaurantId){ throw new Error(`${this.key}: getOffers nicht implementiert`); }
+  /** Liefert den Deep-Link fuer ein Restaurant oder Gericht. Bei fehlender
+   *  echter Datenquelle wird ehrlich nur die Anbieter-Startseite verwendet
+   *  statt einer erfundenen restaurant-spezifischen URL. */
+  getDeepLink(kind, ids){ return FOOD_PROVIDER_META[this.key].homepage; }
+}
+
+/** Versetzt einen Referenzpunkt um dx/dy Meter (kleine Distanzen, hinreichend genau). */
+function offsetLatLon(lat, lon, dxM, dyM){
+  const dLat = dyM / 111320;
+  const dLon = dxM / (111320 * Math.cos(lat * Math.PI / 180));
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+/** Mock-/Adapter-Provider: erfuellt exakt dieselbe Schnittstelle wie eine
+ *  echte Implementierung spaeter auch erfuellen wuerde. Die Restaurants
+ *  werden relativ zum jeweiligen Nutzerstandort platziert (kleiner,
+ *  deterministischer Versatz), damit "Restaurants in deiner Naehe" bei
+ *  jedem Standort plausibel wirkt - die Inhalte selbst sind Demo-Daten. */
+class MockFoodProvider extends FoodProvider{
+  constructor(key, seed){ super(key); this.seed = seed; }
+
+  async searchRestaurants(userPos, query){
+    if(!userPos) return [];
+    const q = (query || '').trim().toLowerCase();
+    return this.seed
+      .filter(s => !q || s.name.toLowerCase().includes(q) || s.cuisineTypes.some(c => c.toLowerCase().includes(q)))
+      .map(s => this._toRestaurant(s, userPos));
+  }
+  async getRestaurant(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toRestaurant(s, null) : null;
+  }
+  async getMenu(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toMenu(s) : [];
+  }
+  async getOffers(providerRestaurantId){
+    const s = this.seed.find(s => s.providerRestaurantId === providerRestaurantId);
+    return s ? this._toOffers(s) : [];
+  }
+  getDeepLink(){ return FOOD_PROVIDER_META[this.key].homepage; }
+
+  _toRestaurant(s, userPos){
+    const pos = userPos ? offsetLatLon(userPos.lat, userPos.lon, s.offset.dx, s.offset.dy) : null;
+    const distance = (userPos && pos) ? haversineMeters(userPos.lat, userPos.lon, pos.lat, pos.lon) : null;
+    return {
+      id: `${this.key}_${s.providerRestaurantId}`,
+      provider: this.key,
+      providerRestaurantId: s.providerRestaurantId,
+      name: s.name,
+      image: s.image || null,
+      cuisineTypes: s.cuisineTypes,
+      rating: s.rating ?? null,
+      distance,
+      deliveryTime: s.deliveryTime,
+      deliveryFee: s.deliveryFee,
+      minimumOrder: s.minimumOrder,
+      isOpen: s.isOpen,
+      pickupAvailable: !!s.pickupAvailable,
+      offers: this._toOffers(s),
+      menu: this._toMenu(s),
+      address: s.address || null,
+      lat: pos ? pos.lat : null,
+      lon: pos ? pos.lon : null,
+      deepLink: this.getDeepLink()
+    };
+  }
+  _toMenu(s){
+    return (s.menu || []).map(m => ({
+      id: `${this.key}_${m.providerItemId}`,
+      provider: this.key,
+      providerItemId: m.providerItemId,
+      restaurantId: `${this.key}_${s.providerRestaurantId}`,
+      name: m.name,
+      description: m.description || null,
+      image: m.image || null,
+      price: m.price,
+      originalPrice: m.originalPrice ?? null,
+      discount: m.originalPrice ? Math.round((1 - m.price / m.originalPrice) * 100) : null,
+      available: m.available !== false,
+      options: m.options || [],
+      deepLink: this.getDeepLink()
+    }));
+  }
+  _toOffers(s){
+    return (s.offers || []).map((o, i) => ({
+      id: `${this.key}_${s.providerRestaurantId}_offer${i}`,
+      title: o.title,
+      description: o.description || null,
+      discount: o.discount || null,
+      originalPrice: o.originalPrice ?? null,
+      finalPrice: o.finalPrice ?? null,
+      conditions: o.conditions || null,
+      deepLink: this.getDeepLink()
+    }));
+  }
+}
+
+/* =====================================================================
+   FOOD DATA SCRAPE - ADAPTER-SKELETT (bewusst NICHT aktiv verdrahtet)
+
+   WICHTIG - bitte lesen, bevor hier irgendetwas "scharf" geschaltet wird:
+   "Food Data Scrape" konnte nicht als eigenstaendiges, oeffentlich
+   dokumentiertes API-Produkt identifiziert werden. Es wurden dazu keine
+   Basis-URL, keine Authentifizierungsmethode, keine Endpunkt-Pfade und
+   keine Response-Feldnamen gefunden. Alles unten ist deshalb bewusst
+   TODO/PLACEHOLDER und wirft absichtlich einen Fehler, statt eine
+   erfundene URL anzufragen (siehe Vorgabe: "keine API-Endpunkte,
+   Parameter oder Response-Felder erfinden").
+
+   Sobald echte Doku/Credentials vorliegen, hier eintragen:
+   - TODO: Basis-URL der Food-Data-Scrape-API (z.B. https://api.<anbieter>.com/v1)
+   - TODO: Auth-Methode (Header? Query-Param? Bearer-Token?)
+   - TODO: Endpunkt fuer Restaurantsuche (Pfad, Query-Parameter fuer lat/lon)
+   - TODO: Endpunkt fuer Restaurant-Details
+   - TODO: Endpunkt fuer Menue
+   - TODO: Endpunkt fuer Angebote
+   - TODO: tatsaechliche Response-Feldnamen (die Mapping-Funktionen unten
+     sind Platzhalter und muessen an die echte Struktur angepasst werden)
+
+   ARCHITEKTUR-HINWEIS (siehe Punkt 13 der Aufgabe): Der API-Key darf nicht
+   im Frontend liegen. Diese Datei ist aktuell rein clientseitig (kein
+   eigenes Backend) - fuer eine echte Anbindung braucht es zwingend einen
+   kleinen Server, der den Key haelt und die Anfragen weiterleitet, z.B.:
+
+     Browser (diese App)
+       -> fetch('/api/food/search?lat=..&lon=..')      [kein Key hier]
+       -> eigenes Backend (Node/Express o.ae.)
+            liest process.env.FOOD_DATA_SCRAPE_API_KEY
+       -> https://<food-data-scrape-basis-url>/...      [Key nur hier]
+
+   Diese Datei ruft daher absichtlich NICHT direkt eine externe
+   Food-Data-Scrape-Domain auf - das waere ein Key-Leak im Frontend.
+   ===================================================================== */
+
+class FoodDataScrapeProvider extends FoodProvider{
+  constructor(key){
+    super(key);
+    // TODO: Pfad zum eigenen Backend-Proxy, sobald vorhanden, z.B. '/api/food'
+    this.backendBaseUrl = null;
+  }
+
+  async searchRestaurants(userPos, query, filters){
+    if(!this.backendBaseUrl){
+      throw new Error(`${this.key}: Food Data Scrape ist noch nicht angebunden (fehlende Endpunkt-Dokumentation/Credentials, siehe Kommentar oberhalb).`);
+    }
+    // TODO, sobald Doku vorhanden:
+    // const res = await fetch(`${this.backendBaseUrl}/search?provider=${this.key}&lat=${userPos.lat}&lon=${userPos.lon}&q=${encodeURIComponent(query||'')}`);
+    // const json = await res.json();
+    // return json.restaurants.map(r => this._mapRestaurant(r));
+    throw new Error('nicht implementiert');
+  }
+
+  async getRestaurant(providerRestaurantId, userPos){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    throw new Error('nicht implementiert');
+  }
+
+  async getMenu(providerRestaurantId){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    // TODO: Menue erst bei Bedarf laden (Restaurant-Detailseite), siehe Punkt 8/16
+    throw new Error('nicht implementiert');
+  }
+
+  async getOffers(providerRestaurantId){
+    if(!this.backendBaseUrl) throw new Error(`${this.key}: nicht angebunden`);
+    throw new Error('nicht implementiert');
+  }
+
+  /** Platzhalter-Mapping auf das interne Schema - Feldnamen links sind
+   *  TODO und muessen an die echte Response angepasst werden. */
+  _mapRestaurant(raw){
+    return {
+      id: `${this.key}_${raw.id /* TODO: echtes ID-Feld */}`,
+      provider: this.key,
+      providerRestaurantId: raw.id /* TODO */,
+      name: raw.name /* TODO */,
+      image: raw.image_url ?? null /* TODO */,
+      cuisineTypes: raw.cuisines ?? [] /* TODO */,
+      rating: raw.rating ?? null /* TODO */,
+      distance: raw.distance_m ?? null /* TODO */,
+      deliveryTime: raw.eta /* TODO */,
+      deliveryFee: raw.delivery_fee /* TODO */,
+      minimumOrder: raw.minimum_order /* TODO */,
+      isOpen: raw.is_open /* TODO */,
+      offers: [],
+      menu: [],
+      deepLink: raw.deep_link ?? FOOD_PROVIDER_META[this.key].homepage /* TODO */
+    };
+  }
+}
+
+/* ---------- Food Service (UI -> FoodService -> FoodProvider) ----------
+   Die UI kennt nur diese Schicht, nie einen konkreten Provider-Typ.
+   USE_LIVE_FOOD_DATA schaltet zentral zwischen Mock- und Live-Adapter um -
+   sobald FoodDataScrapeProvider echt angebunden ist, hier auf true
+   stellen (oder besser: automatisch anhand vorhandener backendBaseUrl). */
+const USE_LIVE_FOOD_DATA = false; // TODO: auf true stellen, sobald echte Anbindung steht
+
+function buildFoodProviders(){
+  if(USE_LIVE_FOOD_DATA){
+    return {
+      wolt: new FoodDataScrapeProvider('wolt'),
+      ubereats: new FoodDataScrapeProvider('ubereats'),
+      lieferando: new FoodDataScrapeProvider('lieferando')
+    };
+  }
+  return {
+    wolt: new MockFoodProvider('wolt', WOLT_SEED),
+    ubereats: new MockFoodProvider('ubereats', UBEREATS_SEED),
+    lieferando: new MockFoodProvider('lieferando', LIEFERANDO_SEED)
+  };
+}
+
+/* ---------- Demo-Datensaetze je Anbieter ----------
+   Bewusst so gewaehlt, dass "Burger House" bei allen drei Anbietern mit
+   demselben Standort-Versatz auftaucht (zeigt das Matching), waehrend
+   die anderen Restaurants je Anbieter exklusiv bleiben (zeigt, dass NICHT
+   faelschlich zusammengefuehrt wird). */
+const WOLT_SEED = [
+  { providerRestaurantId:'w1', name:'Burger House', cuisineTypes:['Burger','American'], rating:4.6, deliveryTime:'20-30 min', deliveryFee:1.99, minimumOrder:10, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[{ title:'20% Rabatt', description:'Auf die erste Bestellung', discount:'20%', conditions:'Ab 15 € Bestellwert, neue Kunden' }],
+    menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:9.90, available:true },
+      { providerItemId:'i2', name:'Veggie Burger', description:'Pflanzliche Pattie, vegan möglich', price:8.90, available:true },
+      { providerItemId:'i3', name:'Pommes', description:null, price:3.50, available:true }
+    ]},
+  { providerRestaurantId:'w2', name:'Sushi Ken', cuisineTypes:['Sushi','Asiatisch'], rating:4.8, deliveryTime:'30-40 min', deliveryFee:2.49, minimumOrder:15, isOpen:true, pickupAvailable:false, offset:{dx:-400,dy:300}, address:'Hauptstraße 22',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'California Roll (8 Stk.)', description:null, price:7.90, available:true },
+      { providerItemId:'i2', name:'Lachs Nigiri (4 Stk.)', description:null, price:6.50, available:true }
+    ]},
+  { providerRestaurantId:'w3', name:'Pizzeria Napoli', cuisineTypes:['Pizza','Italienisch'], rating:4.3, deliveryTime:'25-35 min', deliveryFee:0, minimumOrder:12, isOpen:false, pickupAvailable:true, offset:{dx:600,dy:-200}, address:'Marktplatz 5',
+    offers:[{ title:'Kostenlose Lieferung', description:'Dauerhaft, keine Mindestbestellung für die Liefergebühr', discount:null, conditions:'Mindestbestellwert 12 € gilt weiterhin' }],
+    menu:[{ providerItemId:'i1', name:'Pizza Margherita', description:'Tomate, Mozzarella, Basilikum', price:8.50, available:true }]}
+];
+
+const UBEREATS_SEED = [
+  { providerRestaurantId:'u1', name:'Burger House Tübingen', cuisineTypes:['Burger'], rating:4.5, deliveryTime:'25-35 min', deliveryFee:0.99, minimumOrder:9, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[{ title:'2 für 1', description:'Auf alle Cheeseburger, montags bis mittwochs', discount:null, conditions:'Nur Abholung, nicht mit anderen Aktionen kombinierbar' }],
+    menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:8.90, originalPrice:10.90, available:true },
+      { providerItemId:'i2', name:'Chicken Burger', description:'Knuspriges Hähnchen, Coleslaw', price:9.50, available:true }
+    ]},
+  { providerRestaurantId:'u2', name:'Döner Palace', cuisineTypes:['Döner','Türkisch'], rating:4.4, deliveryTime:'15-25 min', deliveryFee:1.49, minimumOrder:8, isOpen:true, pickupAvailable:true, offset:{dx:-150,dy:-350}, address:'Bahnhofstraße 9',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'Döner Kebab', description:null, price:6.50, available:true },
+      { providerItemId:'i2', name:'Dürüm', description:null, price:7.00, available:true }
+    ]},
+  { providerRestaurantId:'u3', name:'Curry Time', cuisineTypes:['Asiatisch','Vegetarisch'], rating:4.7, deliveryTime:'30-40 min', deliveryFee:1.99, minimumOrder:12, isOpen:true, pickupAvailable:false, offset:{dx:500,dy:450}, address:'Gartenweg 3',
+    offers:[{ title:'10 € Rabatt ab 25 €', description:null, discount:'10€', conditions:'Einmalig pro Konto, gültig bis Monatsende' }],
+    menu:[{ providerItemId:'i1', name:'Gemüse-Curry mit Reis', description:'Vegan', price:11.90, available:true }]}
+];
+
+const LIEFERANDO_SEED = [
+  { providerRestaurantId:'l1', name:'Burger House', cuisineTypes:['Burger','American'], rating:4.5, deliveryTime:'30-40 min', deliveryFee:1.50, minimumOrder:11, isOpen:true, pickupAvailable:true, offset:{dx:250,dy:180}, address:'Musterstraße 1',
+    offers:[], menu:[
+      { providerItemId:'i1', name:'Cheeseburger', description:'Rind, Cheddar, Salat, Tomate', price:10.50, available:true },
+      { providerItemId:'i2', name:'Bacon Burger', description:null, price:11.20, available:true }
+    ]},
+  { providerRestaurantId:'l2', name:'Pizzeria Napoli', cuisineTypes:['Pizza','Italienisch'], rating:4.2, deliveryTime:'25-35 min', deliveryFee:1.00, minimumOrder:10, isOpen:true, pickupAvailable:true, offset:{dx:600,dy:-200}, address:'Marktplatz 5',
+    offers:[{ title:'15% Rabatt', description:'Für Neukunden über die Lieferando-App', discount:'15%', conditions:'Ab 20 € Bestellwert' }],
+    menu:[
+      { providerItemId:'i1', name:'Pizza Margherita', description:'Tomate, Mozzarella, Basilikum', price:8.90, available:true },
+      { providerItemId:'i2', name:'Pizza Salami', description:null, price:9.90, available:true }
+    ]},
+  { providerRestaurantId:'l3', name:'Grüner Salat Bar', cuisineTypes:['Vegetarisch','Vegan'], rating:4.6, deliveryTime:'20-30 min', deliveryFee:2.00, minimumOrder:9, isOpen:true, pickupAvailable:true, offset:{dx:-600,dy:100}, address:'Uhlandstraße 14',
+    offers:[], menu:[{ providerItemId:'i1', name:'Quinoa-Bowl', description:'Vegan', price:9.90, available:true }]}
+];
+
+const FOOD_PROVIDERS = buildFoodProviders();
+
+const FOOD_CATEGORIES = ['Pizza','Burger','Sushi','Döner','Asiatisch','Vegetarisch','Vegan','Frühstück','Desserts'];
+
+/* ---------- Restaurant-Matching (konservativ) ----------
+   Zwei Restaurants unterschiedlicher Anbieter gelten nur dann als
+   dasselbe, wenn sowohl der normalisierte Name als auch die Koordinaten
+   (< 120 m Abstand) uebereinstimmen. Lieber kein Match als ein falsches
+   Match - siehe Vorgabe. */
+function normalizeRestaurantName(name){
+  return name
+    .toLowerCase()
+    .replace(/\b(tübingen|stuttgart|berlin|münchen|hamburg|köln)\b/g, '')
+    .replace(/[|\-–,].*$/, '')
+    .replace(/[^a-z0-9äöüß ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+const MATCH_RADIUS_M = 120;
+
+function matchRestaurants(rawByProvider){
+  // rawByProvider: [{ provider, restaurants: Restaurant[] }]
+  const groups = [];
+  rawByProvider.forEach(({ restaurants }) => {
+    restaurants.forEach(r=>{
+      const norm = normalizeRestaurantName(r.name);
+      let group = groups.find(g =>
+        g.norm === norm &&
+        g.lat != null && r.lat != null &&
+        haversineMeters(g.lat, g.lon, r.lat, r.lon) <= MATCH_RADIUS_M
+      );
+      if(!group){
+        group = { id:`grp_${groups.length}_${norm.replace(/\s+/g,'_')}`, norm, name:r.name, entries:[], lat:r.lat, lon:r.lon };
+        groups.push(group);
+      }
+      group.entries.push(r);
+    });
+  });
+  return groups.map(g=>{
+    const ratings = g.entries.map(e=>e.rating).filter(r=>r!=null);
+    const distances = g.entries.map(e=>e.distance).filter(d=>d!=null);
+    const bestOffer = g.entries.flatMap(e=>e.offers).sort((a,b)=> (a.discount?0:1)-(b.discount?0:1))[0] || null;
+    return {
+      id: g.id,
+      name: g.name,
+      image: g.entries.find(e=>e.image)?.image || null,
+      cuisineTypes: [...new Set(g.entries.flatMap(e=>e.cuisineTypes))],
+      rating: ratings.length ? ratings.reduce((a,b)=>a+b,0)/ratings.length : null,
+      distance: distances.length ? Math.min(...distances) : null,
+      isOpenAnywhere: g.entries.some(e=>e.isOpen),
+      cheapestDeliveryFee: Math.min(...g.entries.map(e=>e.deliveryFee ?? Infinity)),
+      fastestDeliveryTime: g.entries.map(e=>e.deliveryTime).sort()[0],
+      bestOffer,
+      entries: g.entries // je ein Eintrag pro Anbieter, mit providerRestaurantId etc. erhalten
+    };
+  });
+}
+
+/* ---------- Suche / Aggregation ---------- */
+let foodProviderStatus = {}; // key -> { ok, error }
+let foodResultsRaw = [];     // gematchte Gruppen (letzter Suchlauf)
+let foodLastUpdated = null;
+
+async function runFoodSearch(query){
+  const entries = Object.entries(FOOD_PROVIDERS);
+  const settled = await Promise.allSettled(
+    entries.map(async ([key, provider]) => ({ key, restaurants: await provider.searchRestaurants(userPos, query) }))
+  );
+  foodProviderStatus = {};
+  const rawByProvider = [];
+  settled.forEach((res, i)=>{
+    const key = entries[i][0];
+    if(res.status === 'fulfilled'){
+      foodProviderStatus[key] = { ok:true };
+      rawByProvider.push({ provider:key, restaurants: res.value.restaurants });
+    }else{
+      foodProviderStatus[key] = { ok:false, error: String(res.reason?.message || res.reason) };
+    }
+  });
+  foodResultsRaw = matchRestaurants(rawByProvider);
+  foodLastUpdated = Date.now();
+}
+
+/* ---------- Filter / Sortierung (Grundgeruest, wie gefordert vorbereitet) ---------- */
+let foodQuery = '';
+let foodCategory = null;
+let foodSort = 'recommended'; // recommended | fastest | cheapest | rating | distance | offers
+let foodFilters = { onlyOpen:false, onlyOffers:false };
+
+function applyFoodFiltersAndSort(groups){
+  let list = groups.filter(g=>{
+    if(foodCategory && !g.cuisineTypes.some(c => c.toLowerCase() === foodCategory.toLowerCase())) return false;
+    if(foodFilters.onlyOpen && !g.isOpenAnywhere) return false;
+    if(foodFilters.onlyOffers && !g.bestOffer) return false;
+    return true;
+  });
+  const sorters = {
+    recommended: (a,b)=> (b.rating||0) - (a.rating||0),
+    fastest: (a,b)=> parseInt(a.fastestDeliveryTime) - parseInt(b.fastestDeliveryTime),
+    cheapest: (a,b)=> (a.cheapestDeliveryFee||0) - (b.cheapestDeliveryFee||0),
+    rating: (a,b)=> (b.rating||0) - (a.rating||0),
+    distance: (a,b)=> (a.distance ?? Infinity) - (b.distance ?? Infinity),
+    offers: (a,b)=> (b.bestOffer?1:0) - (a.bestOffer?1:0)
+  };
+  return list.sort(sorters[foodSort] || sorters.recommended);
+}
+
+/* ---------- UI ---------- */
+let foodView = 'home'; // 'home' | 'detail'
+let foodSelectedGroupId = null;
+
+function goFood(view, groupId){
+  foodView = view;
+  foodSelectedGroupId = groupId || null;
+  renderFoodScreen();
+}
+
+async function ensureFoodLoaded(){
+  if(!userPos){
+    foodContent.innerHTML = '<div class="empty loading-pulse">Ermittle deinen Standort …</div>';
+    await new Promise(resolve=>{
+      if(!navigator.geolocation){ resolve(); return; }
+      navigator.geolocation.getCurrentPosition(pos=>{
+        userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        resolve();
+      }, ()=> resolve(), { enableHighAccuracy:true, timeout:8000 });
+    });
+  }
+  foodContent.innerHTML = '<div class="empty loading-pulse">Lade Restaurants …</div>';
+  await runFoodSearch(foodQuery);
+}
+
+function renderFoodScreen(){
+  foodBack.style.display = foodView === 'home' ? 'none' : 'flex';
+  foodTitle.textContent = foodView === 'home' ? 'Essen' : (foodResultsRaw.find(g=>g.id===foodSelectedGroupId)?.name || 'Restaurant');
+  foodSub.style.display = foodView === 'home' ? 'block' : 'none';
+  if(foodView === 'home') renderFoodHome();
+  else renderFoodDetail();
+}
+
+function updatedAgoLabel(){
+  if(!foodLastUpdated) return '';
+  const s = Math.max(0, Math.round((Date.now() - foodLastUpdated)/1000));
+  return s < 5 ? 'Gerade eben aktualisiert' : `Zuletzt aktualisiert: vor ${s}s`;
+}
+
+function providerStatusRowHtml(){
+  return Object.entries(FOOD_PROVIDER_META).map(([key,p])=>{
+    const st = foodProviderStatus[key];
+    const ok = st ? st.ok : true;
+    return `<div class="provider-status-chip">${logoHtml(key, p.color)}<span>${p.name}</span> ${ok ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--err)">⚠️</span>'}</div>`;
+  }).join('');
+}
+
+function renderFoodHome(){
+  const list = applyFoodFiltersAndSort(foodResultsRaw);
+
+  foodContent.innerHTML = `
+    <div class="disclaimer-box">${USE_LIVE_FOOD_DATA
+      ? '<b>Live-Daten</b> von den jeweiligen Anbietern.'
+      : '<b>Demo-Daten:</b> Für Wolt, Uber Eats und Lieferando ist aktuell keine angebundene Live-Datenquelle konfiguriert (siehe Hinweis im Code: FoodDataScrapeProvider/USE_LIVE_FOOD_DATA). Diese Ansicht zeigt daher Beispiel-Restaurants, um den Anbietervergleich zu demonstrieren – keine echten Angebote. „Bestellen"-Buttons öffnen die jeweilige offizielle Anbieter-Startseite.'}</div>
+
+    <div class="food-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input type="text" id="foodSearchInput" placeholder="Restaurant oder Gericht suchen" value="${escapeHtml(foodQuery)}">
+    </div>
+
+    <div class="food-lead">Was möchtest du essen?</div>
+    <div class="cat-scroll" id="foodCats">
+      ${FOOD_CATEGORIES.map(c=>`<div class="cat-chip ${foodCategory===c?'on':''}" data-cat="${c}">${c}</div>`).join('')}
+    </div>
+
+    <div class="provider-status-row">${providerStatusRowHtml()}</div>
+
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin:4px 2px 8px;">
+      <div class="food-lead" style="margin:0;">Restaurants in deiner Nähe</div>
+      <span style="font-size:10.5px; color:var(--ink-soft);">${updatedAgoLabel()}</span>
+    </div>
+    <div id="foodResultsList"></div>
+  `;
+
+  const input = foodContent.querySelector('#foodSearchInput');
+  let searchTimer = null;
+  input.addEventListener('input', ()=>{
+    foodQuery = input.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async ()=>{ await runFoodSearch(foodQuery); renderFoodHome(); }, 350);
+  });
+
+  foodContent.querySelectorAll('.cat-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      foodCategory = foodCategory === chip.dataset.cat ? null : chip.dataset.cat;
+      renderFoodHome();
+    });
+  });
+
+  const resultsList = foodContent.querySelector('#foodResultsList');
+  if(!list.length){
+    resultsList.innerHTML = '<div class="empty">Keine Restaurants gefunden.</div>';
+  }else{
+    list.forEach(g=>{
+      const providerNames = g.entries.map(e => FOOD_PROVIDER_META[e.provider].name).join(' · ');
+      const card = document.createElement('div');
+      card.className = 'rest-card';
+      card.innerHTML = `
+        <div class="rest-thumb">${g.image ? `<img src="${g.image}" alt="" loading="lazy">` : '🍽️'}</div>
+        <div class="rest-info">
+          <div class="rest-name">${escapeHtml(g.name)}</div>
+          <div class="rest-meta">${escapeHtml(g.cuisineTypes.join(', '))}${g.rating ? ' · ⭐ ' + g.rating.toFixed(1) : ''}</div>
+          <div class="rest-meta2">${g.fastestDeliveryTime} · ab ${g.cheapestDeliveryFee.toFixed(2)} €${g.distance!=null ? ' · ' + metersLabel(g.distance) : ''}</div>
+          <div class="rest-providers">${g.entries.length>1 ? `<span class="rest-tag" style="background:var(--surface-2); color:var(--ink);">${g.entries.length} Anbieter</span>` : ''}${g.entries.map(e=>`<span class="rest-tag" style="background:${FOOD_PROVIDER_META[e.provider].color}">${FOOD_PROVIDER_META[e.provider].name}</span>`).join('')}</div>
+          ${g.bestOffer ? `<div class="offer-badge">${escapeHtml(g.bestOffer.title)}</div>` : ''}
+        </div>
+      `;
+      card.addEventListener('click', ()=> goFood('detail', g.id));
+      resultsList.appendChild(card);
+    });
+  }
+}
+
+function renderFoodDetail(){
+  const g = foodResultsRaw.find(x => x.id === foodSelectedGroupId);
+  if(!g){ goFood('home'); return; }
+
+  const compareHtml = g.entries.map(e=>{
+    const p = FOOD_PROVIDER_META[e.provider];
+    return `
+      <div class="compare-row">
+        <div class="compare-top">${logoHtml(e.provider, p.color)}<div class="compare-name">${p.name}</div>${!e.isOpen ? '<span style="font-size:11px; color:var(--err); font-weight:600;">Geschlossen</span>' : ''}</div>
+        <div class="compare-stats">
+          <div><b>${e.deliveryTime}</b> Lieferzeit</div>
+          <div><b>${e.deliveryFee.toFixed(2)} €</b> Liefergebühr</div>
+          <div><b>${e.minimumOrder.toFixed(0)} €</b> Mindestbestellwert</div>
+        </div>
+        ${e.pickupAvailable ? '<div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">Abholung möglich</div>' : ''}
+        ${e.offers.length ? e.offers.map(o=>`<div class="offer-badge" style="display:block; margin-bottom:8px;">${escapeHtml(o.title)}${o.conditions ? ' – ' + escapeHtml(o.conditions) : ''}</div>`).join('') : ''}
+        <a class="detail-btn" href="${e.deepLink}" target="_blank" rel="noopener" style="display:block;">Bei ${p.name} bestellen</a>
+      </div>
+    `;
+  }).join('');
+
+  const cheapestEntry = g.entries.reduce((a,b)=> ((a.deliveryFee ?? Infinity) <= (b.deliveryFee ?? Infinity) ? a : b));
+  const menuHtml = cheapestEntry.menu.map(m=>`
+    <div class="menu-item-row">
+      <div class="menu-item-top">
+        <div>
+          <div class="menu-item-name">${escapeHtml(m.name)}</div>
+          ${m.description ? `<div class="menu-item-desc">${escapeHtml(m.description)}</div>` : ''}
+        </div>
+        <div class="menu-item-price">${m.originalPrice ? `<span class="orig">${m.originalPrice.toFixed(2)} €</span>` : ''}${m.price.toFixed(2)} €</div>
+      </div>
+    </div>
+  `).join('');
+
+  foodContent.innerHTML = `
+    <div class="section-label">Anbieter vergleichen</div>
+    ${compareHtml}
+    <div class="section-label">Speisekarte (${FOOD_PROVIDER_META[cheapestEntry.provider].name})</div>
+    <div class="disclaimer-box" style="margin-bottom:10px;">Preis vor Checkout – zusätzliche Gebühren (z. B. Service) können erst im Bestellprozess des jeweiligen Anbieters sichtbar werden und sind hier nicht enthalten.</div>
+    ${menuHtml}
+  `;
+}
+
+foodBack.addEventListener('click', ()=> goFood('home'));
+
+
+const PROFILE_KEY = 'rollr_profile_v1';
+const SETTINGS_KEY = 'rollr_settings_v1';
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function loadProfile(){
+  try{
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(err){}
+  const fresh = {
+    firstName:'', lastName:'', email:'', phone:'',
+    username: 'user_' + Math.random().toString(36).slice(2, 8),
+    createdAt: Date.now()
+  };
+  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(fresh)); }catch(err){}
+  return fresh;
+}
+function saveProfile(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(err){} }
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(err){}
+  return { notifications:true, theme:'system' };
+}
+function saveSettings(s){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch(err){} }
+
+function effectiveTheme(theme){
+  if(theme !== 'system') return theme;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+function applyTheme(theme){
+  document.querySelector('.phone').classList.toggle('theme-light', effectiveTheme(theme) === 'light');
+}
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', ()=>{
+    if(loadSettings().theme === 'system') applyTheme('system');
+  });
+}
+applyTheme(loadSettings().theme);
+
+async function locationPermissionState(){
+  if(!navigator.permissions?.query) return 'unknown';
+  try{ return (await navigator.permissions.query({ name:'geolocation' })).state; }
+  catch(err){ return 'unknown'; }
+}
+function permissionLabel(state){
+  return { granted:['Erteilt','var(--ok)'], denied:['Blockiert','var(--err)'], prompt:['Noch nicht entschieden','var(--ink-soft)'], unknown:['Unbekannt','var(--ink-soft)'] }[state] || ['Unbekannt','var(--ink-soft)'];
+}
+
+let profileView = 'menu'; // 'menu' | 'account' | 'settings' | 'edit'
+let editingField = null;
+
+function goProfile(view, field){
+  profileView = view;
+  editingField = field || null;
+  renderProfileScreen();
+}
+
+function chevronRowHtml(title, sub){
+  return `
+    <div class="rowinfo">
+      <div class="name">${title}</div>
+      ${sub ? `<div class="meta">${sub}</div>` : ''}
+    </div>
+    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+  `;
+}
+
+function renderProfileScreen(){
+  profileBack.style.display = profileView === 'menu' ? 'none' : 'flex';
+  const titles = { menu:'Profil', account:'Konto', settings:'Einstellungen', edit:'Bearbeiten' };
+  const subs = {
+    menu:'Dein lokales Profil auf diesem Gerät.',
+    account:'Persönliche Daten und Account-Informationen.',
+    settings:'Allgemein, Darstellung, Datenschutz und mehr.',
+    edit:''
+  };
+  profileTitle.textContent = titles[profileView];
+  profileSub.textContent = subs[profileView];
+  profileSub.style.display = subs[profileView] ? 'block' : 'none';
+
+  if(profileView === 'menu') renderProfileMenu();
+  else if(profileView === 'account') renderAccountPage();
+  else if(profileView === 'settings') renderSettingsPage();
+  else if(profileView === 'edit') renderEditPage();
+}
+
+function renderProfileMenu(){
+  const profile = loadProfile();
+  const initials = ((profile.firstName[0] || '') + (profile.lastName[0] || '')).toUpperCase() || 'G';
+  const displayName = (profile.firstName || profile.lastName) ? `${profile.firstName} ${profile.lastName}`.trim() : 'Profil einrichten';
+  const sub = profile.email || 'Keine E-Mail hinterlegt';
+
+  profileContent.innerHTML = `
+    <div class="profile-card">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <div class="profile-card-name">${escapeHtml(displayName)}</div>
+        <div class="profile-card-sub">${escapeHtml(sub)}</div>
+      </div>
+    </div>
+    <div class="row" id="goAccount" style="cursor:pointer;">${chevronRowHtml('Konto', 'Persönliche Daten, E-Mail, Account-Status')}</div>
+    <div class="row" id="goSettings" style="cursor:pointer;">${chevronRowHtml('Einstellungen', 'Darstellung, Standort, Datenschutz')}</div>
+  `;
+  profileContent.querySelector('#goAccount').addEventListener('click', ()=> goProfile('account'));
+  profileContent.querySelector('#goSettings').addEventListener('click', ()=> goProfile('settings'));
+}
+
+function renderAccountPage(){
+  const profile = loadProfile();
+  const createdLabel = new Date(profile.createdAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const fields = [
+    ['firstName','Vorname'], ['lastName','Nachname'], ['email','E-Mail-Adresse'], ['phone','Telefonnummer']
+  ];
+
+  profileContent.innerHTML = `
+    <div class="section-label">Persönliche Daten</div>
+    ${fields.map(([key,label])=>`
+      <div class="row edit-row" data-field="${key}" style="cursor:pointer;">
+        ${chevronRowHtml(label, profile[key] ? escapeHtml(profile[key]) : 'Nicht angegeben')}
+      </div>
+    `).join('')}
+
+    <div class="section-label">Account</div>
+    <div class="info-row">
+      <div class="info-label">Benutzername / Account-ID</div>
+      <div class="info-value">${escapeHtml(profile.username)}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Account-Status</div>
+      <div class="info-value"><span class="status-dot" style="background:var(--ok)"></span>Lokal gespeichert – kein Login bei einem Scooter-Anbieter verknüpft</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Registrierungsinformationen</div>
+      <div class="info-value">Auf diesem Gerät angelegt am ${createdLabel}</div>
+    </div>
+  `;
+  profileContent.querySelectorAll('.edit-row').forEach(row=>{
+    row.addEventListener('click', ()=> goProfile('edit', row.dataset.field));
+  });
+}
+
+const FIELD_META = {
+  firstName:{ label:'Vorname', type:'text' },
+  lastName:{ label:'Nachname', type:'text' },
+  email:{ label:'E-Mail-Adresse', type:'email' },
+  phone:{ label:'Telefonnummer', type:'tel' }
+};
+
+function renderEditPage(){
+  const profile = loadProfile();
+  const meta = FIELD_META[editingField];
+  if(!meta){ goProfile('account'); return; }
+  profileTitle.textContent = meta.label;
+
+  profileContent.innerHTML = `
+    <div class="field-label">${meta.label}</div>
+    <input class="field-input" id="editInput" type="${meta.type}" value="${escapeHtml(profile[editingField] || '')}" placeholder="${meta.label} eingeben" autocomplete="off">
+    <div style="height:16px;"></div>
+    <div class="detail-btn" id="editSave">Speichern</div>
+  `;
+  const input = profileContent.querySelector('#editInput');
+  input.focus();
+  profileContent.querySelector('#editSave').addEventListener('click', ()=>{
+    profile[editingField] = input.value.trim();
+    saveProfile(profile);
+    goProfile('account');
+  });
+}
+
+function renderSettingsPage(){
+  const settings = loadSettings();
+
+  profileContent.innerHTML = `
+    <div class="section-label">Allgemein</div>
+    <div class="info-row">
+      <div class="info-label">Sprache</div>
+      <div class="info-value">Deutsch (aktuell einzige verfügbare Sprache)</div>
+    </div>
+    <div class="row" style="cursor:default;">
+      <div class="rowinfo">
+        <div class="name">Benachrichtigungen</div>
+        <div class="meta">Nur eine gespeicherte Einstellung – diese App versendet aktuell keine echten Push-Benachrichtigungen</div>
+      </div>
+      <div class="toggle ${settings.notifications ? 'on' : ''}" id="notifToggle"><div class="knob"></div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Standortberechtigung</div>
+      <div class="info-value" id="permInfo">Wird geprüft …</div>
+      <div class="goto" id="permRetry" style="display:inline-block; margin-top:8px; cursor:pointer;">Standort erneut anfragen</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">App-Einstellungen</div>
+      <div class="info-value">Weitere Einstellungen folgen in einer späteren Version.</div>
+    </div>
+
+    <div class="section-label">Darstellung</div>
+    <div class="segmented" id="themeSeg">
+      <div class="segmented-opt" data-v="light">Hell</div>
+      <div class="segmented-opt" data-v="dark">Dunkel</div>
+      <div class="segmented-opt" data-v="system">System</div>
+    </div>
+
+    <div class="section-label">Datenschutz</div>
+    <div class="info-row">
+      <div class="info-label">Standortfreigabe</div>
+      <div class="info-value">Dein Standort wird ausschließlich lokal in deinem Browser verwendet, um Entfernungen zu berechnen – er wird an keinen eigenen Server übertragen (diese App hat kein eigenes Backend).</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Datenschutzeinstellungen</div>
+      <div class="info-value">Es gibt kein Nutzerkonto und kein Tracking. Profildaten liegen ausschließlich lokal (localStorage) auf diesem Gerät.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Datenverwaltung</div>
+      <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <div class="goto" id="wipeProfile" style="cursor:pointer;">Profildaten löschen</div>
+      </div>
+    </div>
+
+    <div class="section-label">App</div>
+    <div class="info-row">
+      <div class="info-label">Über die App</div>
+      <div class="info-value">Combine zeigt Scooter und Restaurants mehrerer Anbieter auf einer Karte/Liste und verlinkt zum Entsperren bzw. Bestellen direkt in die jeweils offizielle Anbieter-App.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Version</div>
+      <div class="info-value">1.0.0</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Hilfe</div>
+      <div class="info-value">Fragen zu einer konkreten Fahrt, Bestellung oder Abrechnung klärt bitte direkt die jeweilige Anbieter-App – dort läuft der eigentliche Vorgang.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Support</div>
+      <div class="info-value">Für Probleme mit einem Scooter oder einer Bestellung wende dich an den Support des jeweiligen Anbieters in dessen App.</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Rechtliche Informationen</div>
+      <div class="info-value">Inoffizieller Prototyp, keine Verbindung zu Dott, Bolt, Voi, Lime, Zeus, Yoio, Hopp, Wolt, Uber Eats oder Lieferando. Scooter-Standortdaten via MobiData BW (CC BY 4.0). Die Restaurant-Daten im Essen-Bereich sind aktuell Demo-Daten (siehe Hinweis dort) – keine echten Live-Daten.</div>
+    </div>
+  `;
+
+  profileContent.querySelector('#notifToggle').addEventListener('click', ()=>{
+    settings.notifications = !settings.notifications;
+    saveSettings(settings);
+    renderSettingsPage();
+  });
+
+  const seg = profileContent.querySelector('#themeSeg');
+  seg.querySelectorAll('.segmented-opt').forEach(opt=>{
+    opt.classList.toggle('on', opt.dataset.v === settings.theme);
+    opt.addEventListener('click', ()=>{
+      settings.theme = opt.dataset.v;
+      saveSettings(settings);
+      applyTheme(settings.theme);
+      renderSettingsPage();
+    });
+  });
+
+  profileContent.querySelector('#permRetry').addEventListener('click', locateAndLoad);
+  locationPermissionState().then(state=>{
+    const [label, color] = permissionLabel(state);
+    const el = profileContent.querySelector('#permInfo');
+    if(el) el.innerHTML = `<span class="status-dot" style="background:${color}"></span>${label}`;
+  });
+
+  profileContent.querySelector('#wipeProfile').addEventListener('click', ()=>{
+    try{ localStorage.removeItem(PROFILE_KEY); }catch(err){}
+    goProfile('menu');
+  });
+}
+
+profileBack.addEventListener('click', ()=>{
+  goProfile(profileView === 'edit' ? 'account' : 'menu');
+});
+
+document.getElementById('locateBtn').addEventListener('click', ()=>{
+  if(ROTATE_SUPPORTED && Math.abs(map.getBearing()) > 1){
+    map.setBearing(0); // erst Norden ausrichten, Position bleibt erhalten
+  }else{
+    locateAndLoad(); // schon nach Norden ausgerichtet -> auf Standort zentrieren
+  }
+});
+locateAndLoad();
+
+/* ---------- Aufziehbares Bottom-Sheet (Karte <-> Liste) ---------- */
+const SHEET_HEIGHT = 460;   // Gesamthoehe des Sheets (siehe CSS .sheet)
+const SHEET_PEEK = 84;      // im eingeklapptem Zustand sichtbarer Bereich (Griff + Zusammenfassung)
+const SHEET_COLLAPSED_Y = SHEET_HEIGHT - SHEET_PEEK;
+
+let dragPointerId = null;
+let dragStartY = 0;
+let dragStartTranslate = 0;
+let dragLastTranslate = 0;
+let dragMoved = false;
+
+function currentSheetTranslate(){
+  return sheet.classList.contains('expanded') ? 0 : SHEET_COLLAPSED_Y;
+}
+
+function setSheetTranslate(px){
+  sheet.style.transform = `translateY(${px}px)`;
+  mapScreen.classList.toggle('sheet-expanded', px < SHEET_COLLAPSED_Y - 20);
+}
+
+function settleSheet(expand){
+  sheet.classList.toggle('expanded', expand);
+  sheet.style.transform = ''; // CSS-Klasse uebernimmt die Endposition mit Transition
+  mapScreen.classList.toggle('sheet-expanded', expand);
+}
+
+sheetHandle.addEventListener('pointerdown', (e)=>{
+  dragPointerId = e.pointerId;
+  dragStartY = e.clientY;
+  dragStartTranslate = currentSheetTranslate();
+  dragLastTranslate = dragStartTranslate;
+  dragMoved = false;
+  sheet.classList.add('dragging');
+  sheetHandle.setPointerCapture(e.pointerId);
+});
+
+sheetHandle.addEventListener('pointermove', (e)=>{
+  if(dragPointerId === null) return;
+  const dy = e.clientY - dragStartY;
+  if(Math.abs(dy) > 6) dragMoved = true;
+  const t = Math.max(0, Math.min(SHEET_COLLAPSED_Y, dragStartTranslate + dy));
+  dragLastTranslate = t;
+  setSheetTranslate(t);
+});
+
+function endDrag(){
+  if(dragPointerId === null) return;
+  dragPointerId = null;
+  sheet.classList.remove('dragging');
+  if(dragMoved){
+    settleSheet(dragLastTranslate < SHEET_COLLAPSED_Y / 2);
+  }else{
+    // reiner Tap auf den Griff -> Zustand umschalten
+    settleSheet(!sheet.classList.contains('expanded'));
+  }
+}
+
+sheetHandle.addEventListener('pointerup', endDrag);
+sheetHandle.addEventListener('pointercancel', endDrag);
+
+/* ---------- Anbieter-Auswahl (wird sowohl im "Anbieter"-Tab als auch im Filter-Panel genutzt) ---------- */
+function renderProviderToggles(container){
+  container.innerHTML = '';
+  Object.entries(PROVIDER_META).forEach(([key, p])=>{
+    const isOn = activeProviders.has(key);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      ${logoHtml(key, p.color)}
+      <div class="rowinfo">
+        <div class="name">${p.name}</div>
+        <div class="meta">${isOn ? 'wird auf der Karte angezeigt' : 'ausgeblendet'}</div>
+      </div>
+      <div class="toggle ${isOn ? 'on' : ''}" data-key="${key}"><div class="knob"></div></div>
+    `;
+    const toggleEl = row.querySelector('.toggle');
+    toggleEl.addEventListener('click', ()=>{
+      if(activeProviders.has(key)) activeProviders.delete(key);
+      else activeProviders.add(key);
+      renderProviderToggles(providerList);
+      renderProviderToggles(filterProviderList);
+      renderVehicles(lastNearbyVehicles);
+    });
+    container.appendChild(row);
+  });
+}
+renderProviderToggles(providerList);
+renderProviderToggles(filterProviderList);
+
+/* ---------- Filter-Panel: Radius und Preis ---------- */
+function updateRadiusLabel(){ radiusValue.textContent = `${radiusSlider.value} km`; }
+function updatePriceLabel(){ priceValue.textContent = `${Number(priceSlider.value).toFixed(2)} €`; }
+
+radiusSlider.value = maxRadiusM / 1000;
+updateRadiusLabel();
+priceSlider.value = '1.00';
+updatePriceLabel();
+
+radiusSlider.addEventListener('input', ()=>{
+  maxRadiusM = Number(radiusSlider.value) * 1000;
+  updateRadiusLabel();
+  renderVehicles(lastNearbyVehicles);
+});
+
+priceFilterToggle.addEventListener('change', ()=>{
+  priceSlider.disabled = !priceFilterToggle.checked;
+  maxPricePerMin = priceFilterToggle.checked ? Number(priceSlider.value) : null;
+  renderVehicles(lastNearbyVehicles);
+});
+
+priceSlider.addEventListener('input', ()=>{
+  updatePriceLabel();
+  if(priceFilterToggle.checked){
+    maxPricePerMin = Number(priceSlider.value);
+    renderVehicles(lastNearbyVehicles);
+  }
+});
+
+function openFilter(){ filterOverlay.classList.add('show'); }
+function closeFilter(){ filterOverlay.classList.remove('show'); }
+filterBtn.addEventListener('click', openFilter);
+document.getElementById('filterClose').addEventListener('click', closeFilter);
+document.getElementById('filterDone').addEventListener('click', closeFilter);
+filterOverlay.addEventListener('click', (e)=>{ if(e.target === filterOverlay) closeFilter(); });
+
+/* ---------- Umschaltung zwischen Karte, Essen, Anbieter und Profil ---------- */
+document.querySelectorAll('.navitem[data-tab]').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.navitem').forEach(i=>i.classList.remove('active'));
+    item.classList.add('active');
+    const tab = item.dataset.tab;
+
+    mapScreen.classList.toggle('hidden', tab !== 'map');
+    foodScreen.classList.toggle('show', tab === 'food');
+    shoppingScreen.classList.toggle('show', tab === 'shopping');
+    profileScreen.classList.toggle('show', tab === 'profile');
+
+    if(tab === 'food'){ ensureFoodLoaded().then(()=> goFood('home')); }
+    if(tab === 'shopping') goShopping('home');
+    if(tab === 'profile') goProfile('menu');
+  });
+});
+</script>
+</body>
+</html>
